@@ -1,0 +1,8 @@
+{
+  "name": "centipede-arena-lan",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "start": "node server.js", "test": "node --test tests/server.test.js", "test:browser": "node tests/browser.cjs" },
+  "dependencies": { "three": "0.128.0", "ws": "^8.18.3" },
+  "devDependencies": { "playwright": "^1.56.0" }
+}

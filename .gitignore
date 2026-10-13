@@ -1,0 +1,28 @@
+# Dependências instaladas com npm install
+node_modules/
+
+# Artefatos gerados por testes
+test-results/
+playwright-report/
+blob-report/
+coverage/
+
+# Cache e bytecode Python
+__pycache__/
+*.py[cod]
+
+# Extração local duplicada; o original está em personagem/FieldFighter.zip
+personagem/fieldfighter-source/
+
+# Configurações locais e logs
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+
+# Arquivos de sistema e editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
