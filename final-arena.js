@@ -13,7 +13,7 @@ function startFinalEncounter(){
   EP.forEach(p=>scene.remove(p.m));EP.length=0;specialMissiles.forEach(p=>scene.remove(p.m));specialMissiles.length=0;
   bullets.forEach(b=>scene.remove(b.m));bullets.length=0;
   flyers.forEach(f=>scene.remove(f.g));flyers.length=0;
-  Object.assign(B,{hp:2400*bossDifficulty.health,max:2400*bossDifficulty.health,dead:false,dt:0,state:'chase',st:0,next:2,t:0,travel:0,h:0,vs:0,rear:0,mouth:0,jaw:0,w:0,warn:0,sp:0});
+  Object.assign(B,{hp:2400*bossDifficulty.health,max:2400*bossDifficulty.health,dead:false,dt:0,state:'chase',st:0,next:2,t:0,travel:0,h:0,vs:0,rear:0,mouth:0,jaw:0,w:0,warn:0,sp:0,dirtClock:0,emergeHit:false});clearBurrowDust();
   B.segs.forEach((segment,i)=>{resetShatter(segment.root);segment.gone=false;segment.f=0;segment.root.visible=true;scene.add(segment.root);B.chain[i].set(-18,0,-6-i*SP);B.disp[i].copy(B.chain[i]);B.Y[i]=1;segment.root.position.set(B.disp[i].x,1,B.disp[i].z)});
   A.u.forEach(u=>scene.remove(u.g));A.u.length=0;Object.assign(A,{on:false,wave:-1,killed:0,t:0});
   Object.assign(R,{hp:1800*bossDifficulty.health,max:1800*bossDifficulty.health,dead:false,deathComplete:false,dt:0,state:'land',st:0,stun:0,par:0,t:0,f:0,vx:0,vz:0,face:0,desperate:false,barrage:0,barrageIndex:0,hover:1,open:0,dr:0,vol:0,fc:0,lock:0,spin:0,rec:[0,0],txt:''});

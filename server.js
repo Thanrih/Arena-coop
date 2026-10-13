@@ -21,6 +21,7 @@ function createArenaServer() {
     '/personagem/arachnodroid-model.js': ['personagem/arachnodroid-model.js', 'text/javascript; charset=utf-8'],
     '/personagem/fieldfighter-model.js': ['personagem/fieldfighter-model.js', 'text/javascript; charset=utf-8'],
     '/network.css': ['network.css', 'text/css; charset=utf-8'],
+    '/assets/menu-forest.png': ['assets/menu-forest.png', 'image/png'],
     '/vendor/three.min.js': ['node_modules/three/build/three.min.js', 'text/javascript; charset=utf-8']
   };
   const server = http.createServer((req, res) => {
@@ -143,8 +144,9 @@ function createArenaServer() {
           !input.aim.every(n => Number.isFinite(n) && Math.abs(n) < 200)) return;
         const allowed = ['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyJ'];
         const keys = Object.fromEntries(allowed.map(k => [k, !!input.keys?.[k]]));
+        const cameraYaw = Number.isFinite(input.cameraYaw) && Math.abs(input.cameraYaw) < 1000 ? input.cameraYaw : 0;
         send(room.players.get(room.host), { type: 'input', id: ws.id,
-          input: { keys, aim: input.aim, shoot: !!input.shoot, parry: !!input.parry, dash: !!input.dash, special: !!input.special } });
+          input: { keys, aim: input.aim, cameraYaw, shoot: !!input.shoot, parry: !!input.parry, dash: !!input.dash, dashHeld: !!input.dashHeld, special: !!input.special } });
       }
       if (msg.type === 'snapshot' && ws.id === room.host) {
         // Ordered reliable messages preserve object creation/removal before transform updates.
