@@ -64,7 +64,7 @@ function renderEttinRage(active,rage=0,enraged=false){
 function startEttin(){
   Object.assign(E,{on:true,dead:false,deathComplete:false,shattered:false,hp:3200*bossDifficulty.health,max:3200*bossDifficulty.health,state:'chase',time:0,clock:0,cooldown:.65,pending:null,combo:0,face:0,wave:0,rage:0,enraged:false,par:0,stun:0,swingCount:0,impactCount:0,slashTime:0,gait:0,stride:0,trailActive:false,shockLife:0,poseStart:null});
   ettinEffects.visible=true;ettinShock.visible=false;for(const trail of ettinTrails){trail.life=0;trail.mesh.visible=false}
-  eg.visible=true;eg.position.set(0,0,-10);E.velocity.set(0,0,0);E.hits.clear();ettinWarning.visible=ettinCone.visible=false;ettinResetAnimation();
+  eg.visible=true;eg.position.set(0,Collision.heightAt(0,-10),-10);E.velocity.set(0,0,0);E.hits.clear();ettinWarning.visible=ettinCone.visible=false;ettinResetAnimation();
   $('bt').textContent='ETTIN · MACHADOS · ◇◇◇◇';$('bb').style.background='#f59838';renderEttinRage(true,0,false);
 }
 function ettinHurt(damage){if(!E.on||E.dead)return;E.hp=Math.max(0,E.hp-damage*(E.stun>0?1.6:1));if(!E.hp){E.dead=true;E.state='dead';E.time=0;E.stun=0;ettinWarning.visible=ettinCone.visible=false}}
@@ -73,7 +73,7 @@ function ettinUltimate(player){
   E.pending=player.id;if(E.state==='chase'||E.state==='recover')ettinBeginAttack('jump',player);return true;
 }
 function ettinBeginAttack(kind,player){
-  E.poseStart=ettinCapturePose();E.attack=kind;E.state='windup';E.time=0;E.target=player.id;E.destination=player.pos.clone();E.destination.y=0;
+  E.poseStart=ettinCapturePose();E.attack=kind;E.state='windup';E.time=0;E.target=player.id;E.destination=player.pos.clone();E.destination.y=Collision.heightAt(E.destination.x,E.destination.z);
   const radius=Math.hypot(E.destination.x,E.destination.z);if(radius>arenaRadius-4)E.destination.multiplyScalar((arenaRadius-4)/radius);
   E.face=Math.atan2(E.destination.x-eg.position.x,E.destination.z-eg.position.z);E.velocity.multiplyScalar(.35);E.hits.clear();E.combo=0;E.pending=null;E.impact=false;
   E.windup=kind==='roar'?ETTIN_TIMING.roar:ETTIN_TIMING.windup;E.clip=kind==='axeSweep'?'sweep':kind==='slam'?'double':'chop';
@@ -149,7 +149,7 @@ function updEttin(dt){
     else if(E.attack==='roar'){ettinHitArea(eg.position,arenaRadius*2,10,38);E.wave=.7;E.waveOrigin=eg.position.clone();ettinImpactFX(16);shake=Math.max(shake,.7);ettinRecover()}
     else ettinStartSwing();
   }else if(E.state==='air'){
-    const t=Math.min(1,E.time/ETTIN_TIMING.jump);eg.position.lerpVectors(E.jumpStart,E.destination,t);eg.position.y=4*t*(1-t)*7;
+    const t=Math.min(1,E.time/ETTIN_TIMING.jump);eg.position.lerpVectors(E.jumpStart,E.destination,t);eg.position.y=E.jumpStart.y+(E.destination.y-E.jumpStart.y)*t+4*t*(1-t)*7;
     if(t===1){eg.position.copy(E.destination);E.hits.clear();ettinHitArea(eg.position,9,32,24);ettinImpactFX(12);ettinRecover();shake=1.3}
   }else if(E.state==='dash'){
     const steps=Math.ceil(dt*ETTIN_DASH_SPEED*bossDifficulty.speed/.5)||1;
@@ -168,12 +168,12 @@ function updEttin(dt){
   else if(E.state==='comboWindup')ettinCombatAdvance(player,dt,.28,true);
   else if(E.state==='combo'||E.state==='swing')ettinCombatAdvance(player,dt,.2,false);
   else if(E.state==='recover')ettinCombatAdvance(player,dt,.24,true);
-  const radius=Math.hypot(eg.position.x,eg.position.z);if(radius>arenaRadius-3){eg.position.x*=(arenaRadius-3)/radius;eg.position.z*=(arenaRadius-3)/radius}
+  Collision.resolve(eg.position,2.5*Math.max(1,eg.scale.x),arenaRadius,{obstacles:false});if(E.state!=='air')eg.position.y=Collision.heightAt(eg.position.x,eg.position.z);
   E.gait+=((['chase','recover'].includes(E.state)?Math.min(1,E.velocity.length()/ETTIN_MOVE_SPEED):0)-E.gait)*(1-Math.exp(-dt*12));E.stride+=dt*E.velocity.length()*1.15;
   ettinAnimate();ettinUpdateEffects(dt);E.wave=Math.max(0,E.wave-dt);E.slashTime=Math.max(0,E.slashTime-step);
   const melee=['combo','slam','axeSweep'].includes(E.attack),preparing=E.state==='windup'||E.state==='comboWindup';
-  ettinCone.visible=melee&&(preparing||E.slashTime>0);ettinCone.position.copy(eg.position);ettinCone.position.y=.09;ettinCone.rotation.y=E.face;ettinCone.scale.setScalar(E.clip==='double'?10:8);ettinCone.material.opacity=E.slashTime>0?.55:.18;
-  ettinWarning.visible=E.wave>0||(!melee&&(E.state==='windup'||E.state==='air'));ettinWarning.position.copy(E.wave>0?E.waveOrigin:E.attack==='jump'?E.destination:eg.position);ettinWarning.position.y=.08;ettinWarning.scale.setScalar(E.wave>0?1+(1-E.wave/.7)*arenaRadius*2:E.attack==='roar'?arenaRadius:9);
+  ettinCone.visible=melee&&(preparing||E.slashTime>0);ettinCone.position.copy(eg.position);ettinCone.position.y=Collision.heightAt(eg.position.x,eg.position.z)+.09;ettinCone.rotation.y=E.face;ettinCone.scale.setScalar(E.clip==='double'?10:8);ettinCone.material.opacity=E.slashTime>0?.55:.18;
+  ettinWarning.visible=E.wave>0||(!melee&&(E.state==='windup'||E.state==='air'));ettinWarning.position.copy(E.wave>0?E.waveOrigin:E.attack==='jump'?E.destination:eg.position);ettinWarning.position.y=Collision.heightAt(ettinWarning.position.x,ettinWarning.position.z)+.08;ettinWarning.scale.setScalar(E.wave>0?1+(1-E.wave/.7)*arenaRadius*2:E.attack==='roar'?arenaRadius:9);
   if(!finalEncounter&&E.state==='stagger')$('bt').textContent='ETTIN · VULNERÁVEL!';
   renderEttinRage(true,E.rage,E.enraged);P=localPlayer;
 }

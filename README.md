@@ -2,10 +2,18 @@
 
 ## Iniciar
 
-1. Dê dois cliques em **iniciar-rede.cmd**. É necessário ter Node.js 20 ou mais recente. Na primeira execução, o script instala as dependências; depois, o jogo funciona sem internet, inclusive a biblioteca gráfica.
+1. Dê dois cliques em **CentipedeArena.exe** para iniciar o servidor e abrir o jogo automaticamente. Como alternativa, use **iniciar-servidor.cmd** para manter apenas o servidor no terminal. É necessário ter Node.js 20 ou mais recente. Na primeira execução pelo `.cmd`, o script instala as dependências; depois, o jogo funciona sem internet, inclusive a biblioteca gráfica.
 2. Abra **http://localhost:3000** no computador que executa o servidor.
 3. Seus amigos devem abrir o endereço **http://IP-DO-COMPUTADOR:3000** mostrado no terminal, usando a mesma rede Wi-Fi ou cabeada. Todos acessam o mesmo servidor; cada computador não precisa instalar nada.
 4. Se o Windows solicitar acesso à rede para o Node.js, permita na rede **privada**. Mantenha o terminal aberto durante as partidas.
+
+O computador que executa o launcher é o servidor autoritativo: ele guarda as salas e simula as partidas multiplayer. O modo Singleplayer também funciona localmente pelo mesmo endereço. Fechar a janela do launcher ou pressionar `Ctrl+C` encerra o servidor e as salas ativas. O antigo **iniciar-rede.cmd** continua disponível e encaminha para **iniciar-servidor.cmd**.
+
+Para recompilar o executável após alterar o launcher:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-launcher.ps1
+```
 
 Alternativa pelo terminal, nesta pasta:
 

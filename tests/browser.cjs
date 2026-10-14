@@ -23,6 +23,9 @@ const {createArenaServer}=require('../server');
     if(process.argv.includes('--multiplayer-sync')){await require('./multiplayer-sync.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
     if(process.argv.includes('--inferno')){await require('./inferno.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
     if(process.argv.includes('--audio')){await require('./audio.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--arachnodroid')){await require('./arachnodroid.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--lighting')){await require('./lighting.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--respawn')){await require('./respawn.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
     const context=await browser.newContext({viewport:{width:1200,height:800}});
     const host=await context.newPage(),guest=await context.newPage();
     for(const page of [host,guest])page.on('pageerror',e=>errors.push(e.message));

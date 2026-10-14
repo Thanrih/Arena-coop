@@ -31,6 +31,10 @@ module.exports=async function testGrass(browser,url,errors){
       return {count:grassSystem.mesh.count,maxRadius,meshCount:scene.children.filter(object=>object.userData.grassSystem).length,radius:grassSystem.radius};
     });
     assert.deepEqual(final,{count:2600,maxRadius:final.maxRadius,meshCount:1,radius:56});assert.ok(final.maxRadius<56);
+    await page.evaluate(()=>{grassSystem.applyConfig({grassDensityMultiplier:1,grassRenderDistance:50});grassSystem.setArenaRadius(640)});
+    assert.equal(await page.evaluate(()=>grassSystem.mesh.count),2500);
+    await page.evaluate(()=>grassSystem.applyConfig({grassRenderDistance:150}));
+    assert.equal(await page.evaluate(()=>grassSystem.mesh.count),22500);
     await page.screenshot({path:'test-results/grass-final.png'});
     console.log('Grass OK: dynamic grass and distributed flowers stay inside both arenas; trees sit on the instanced hexagonal stone wall.');
   }finally{await context.close()}

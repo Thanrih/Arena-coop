@@ -148,6 +148,20 @@
       accent-color: #ffd84a
     }
 
+    #pause-options .option-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 20px
+    }
+
+    #pause-options .option-toggle input {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 auto
+    }
+
     #pixel-value,
     #camera-blur-value {
       color: #ffd84a;
@@ -273,7 +287,8 @@
         FINAL<small>TODOS OS BOSSES JUNTOS</small><i>[5]</i></button>
       <button class="card" data-m="5"><canvas class="ic" data-m="5" width="12" height="12"></canvas>ETTIN<small>MACHADOS
           · RAGE</small><i>[6]</i></button>
-      <button class="card" data-m="6"><canvas class="ic" data-m="6" width="12" height="12"></canvas>INFERNO<small>TODOS · MAPA 20×</small><i>[7]</i></button>
+      <button class="card" data-m="6"><canvas class="ic" data-m="6" width="12" height="12"></canvas>INFERNO<small>TODOS
+          · MAPA 20×</small><i>[7]</i></button>
     </div>
     <p>CLIQUE OU TECLE 1-7 · M VOLTA AO MENU</p>
   </div>
@@ -295,11 +310,14 @@
             id="pause-open-options">Opções</button><button id="pause-exit">Sair</button></div>
       </div>
       <div id="pause-options" hidden>
-        <h2>OPÇÕES</h2><label>Força da pixelização <input id="pixel-strength" type="range" min="0" max="100"
-            step="1"><output id="pixel-value"></output></label><label style="margin-top:20px">Desfoque ao mover a câmera <input
-            id="camera-blur" type="range" min="0" max="10" step="1"><output id="camera-blur-value"></output></label><label style="margin-top:20px">Quantidade de grama <input
-            id="grass-amount" type="range" min="1" max="100" step="1"><output id="grass-amount-value"></output></label><label style="margin-top:20px">Distância da vegetação <input
-            id="vegetation-distance" type="range" min="30" max="180" step="10"><output id="vegetation-distance-value"></output></label>
+        <h2>OPÇÕES</h2><label class="option-toggle">Luz e sombras (leve) <input id="lighting-effects" type="checkbox"></label><label>Força da pixelização <input id="pixel-strength" type="range" min="0" max="100"
+            step="1"><output id="pixel-value"></output></label><label style="margin-top:20px">Desfoque ao mover a câmera
+          <input id="camera-blur" type="range" min="0" max="10" step="1"><output
+            id="camera-blur-value"></output></label><label style="margin-top:20px">Quantidade de grama <input
+            id="grass-amount" type="range" min="1" max="100" step="1"><output
+            id="grass-amount-value"></output></label><label style="margin-top:20px">Distância da vegetação <input
+            id="vegetation-distance" type="range" min="30" max="180" step="10"><output
+            id="vegetation-distance-value"></output></label>
         <div class="pause-actions" style="margin-top:22px"><button id="pause-options-back">Voltar</button></div>
       </div>
     </div>
@@ -310,8 +328,10 @@
   <script>
     const T = THREE, rnd = (a, b) => a + Math.random() * (b - a), ad = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a)), sm = x => x * x * (3 - 2 * x);
     const mat = (c, e = 0) => new T.MeshLambertMaterial({ color: c, emissive: e });
-    const ren = new T.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' }); ren.setPixelRatio(1); ren.shadowMap.enabled = Math.min(innerWidth, innerHeight) >= 600; document.body.appendChild(ren.domElement);
-    const scene = new T.Scene(); scene.background = new T.Color(0x24463f); scene.fog = new T.Fog(0x24463f, 55, 120);
+    let lightingEffects = localStorage.getItem('arena-lighting-effects') !== '0';
+    const ren = new T.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' }); ren.setPixelRatio(1); ren.shadowMap.type = T.BasicShadowMap; ren.shadowMap.enabled = lightingEffects && Math.min(innerWidth, innerHeight) >= 600; document.body.appendChild(ren.domElement);
+    const SKY_COLOR = 0x78afbd;
+    const scene = new T.Scene(); scene.background = new T.Color(SKY_COLOR); scene.fog = new T.Fog(SKY_COLOR, 55, 120);
     const cam = new T.PerspectiveCamera(50, 1, .1, 200);
     // ---- filtro pixel-art: renderiza em baixa resolução + posterização com dither
     let pixelStrength = Math.max(0, Math.min(100, Number(localStorage.getItem('arena-pixel-strength') ?? 70)));
@@ -323,33 +343,41 @@
     const PU = { t: { value: rt.texture }, r: { value: new T.Vector2(4, 4) }, s: { value: pixelStrength / 100 }, b: { value: 0 }, d: { value: new T.Vector2() } };
     const pq = new T.Mesh(new T.PlaneGeometry(2, 2), new T.ShaderMaterial({ uniforms: PU, vertexShader: 'varying vec2 v;void main(){v=uv;gl_Position=vec4(position.xy,0.,1.);}', fragmentShader: 'uniform sampler2D t;uniform vec2 r;uniform float s,b;uniform vec2 d;varying vec2 v;vec3 sampleAt(vec2 q){return texture2D(t,clamp(q,vec2(0.),vec2(1.))).rgb;}void main(){vec2 o=d*b;vec3 raw=sampleAt(v)*.4+(sampleAt(v-o)+sampleAt(v+o))*.2+(sampleAt(v-o*2.)+sampleAt(v+o*2.))*.1,c=raw;vec2 p=mod(floor(v*r),2.);float n=(p.x<1.?(p.y<1.?0.:3.):(p.y<1.?2.:1.))/4.-.375;c=floor(c*7.+.5+n*.7)/7.;c=mix(vec3(dot(c,vec3(.3,.5,.2))),c,1.12);gl_FragColor=vec4(mix(raw,c,s),1.);}' })); pq.frustumCulled = false; pS.add(pq);
     function pixelScale() { const responsive = Math.max(.8, Math.min(2.8, Math.min(innerWidth, innerHeight) / 420)); return 1 + responsive * pixelStrength / 100 }
-    function rs() { const scale = pixelScale(); ren.shadowMap.enabled = Math.min(innerWidth, innerHeight) >= 600; ren.setSize(innerWidth, innerHeight); rt.setSize(Math.max(1, Math.ceil(innerWidth / scale)), Math.max(1, Math.ceil(innerHeight / scale))); PU.r.value.set(rt.width, rt.height); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix() }
+    function rs() { const scale = pixelScale(); ren.shadowMap.enabled = lightingEffects && Math.min(innerWidth, innerHeight) >= 600; ren.setSize(innerWidth, innerHeight); rt.setSize(Math.max(1, Math.ceil(innerWidth / scale)), Math.max(1, Math.ceil(innerHeight / scale))); PU.r.value.set(rt.width, rt.height); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix() }
     function setPixelStrength(value) { pixelStrength = Math.max(0, Math.min(100, Number(value))); PU.s.value = pixelStrength / 100; localStorage.setItem('arena-pixel-strength', pixelStrength); const output = document.getElementById('pixel-value'); if (output) output.textContent = Math.round(pixelStrength) + '%'; rs() }
     function setCameraBlurLevel(value) { cameraBlurLevel = Math.max(0, Math.min(10, Number(value))); localStorage.setItem('arena-camera-blur', cameraBlurLevel); const output = document.getElementById('camera-blur-value'); if (output) output.textContent = Math.round(cameraBlurLevel) + ' / 10'; if (cameraBlurLevel === 0) PU.b.value = 0 }
     function setGrassAmount(value) { grassAmount = Math.max(1, Math.min(100, Number(value))); localStorage.setItem('arena-grass-amount-v2', grassAmount); localStorage.removeItem('arena-grass-amount'); const output = document.getElementById('grass-amount-value'); if (output) output.textContent = Math.round(grassAmount) + '%'; clearTimeout(grassAmountTimer); if (typeof grassSystem !== 'undefined') grassAmountTimer = setTimeout(() => grassSystem.applyConfig({ grassDensityMultiplier: grassAmount / 10 }), 70) }
     function setVegetationDistance(value) { vegetationDistance = Math.max(30, Math.min(180, Number(value))); localStorage.setItem('arena-vegetation-distance', vegetationDistance); const output = document.getElementById('vegetation-distance-value'); if (output) output.textContent = Math.round(vegetationDistance) + ' m'; if (typeof grassSystem !== 'undefined') grassSystem.applyConfig({ grassRenderDistance: vegetationDistance }); if (typeof setInfernoFloraDistance === 'function') setInfernoFloraDistance(vegetationDistance) }
     addEventListener('resize', rs); rs();
-    scene.add(new T.HemisphereLight(0xcfe9c8, 0x2b3a1c, 1));
-    const sun = new T.DirectionalLight(0xfff0c8, .95); sun.position.set(10, 30, 10); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
-    const sc = sun.shadow.camera; sc.left = sc.bottom = -36; sc.right = sc.top = 36; sc.far = 80; scene.add(sun);
-    function makeGroundTexture() {
-      const size = 384, canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
-      const context = canvas.getContext('2d'), image = context.createImageData(size, size), pixels = image.data;
-      const palette = [[94, 170, 91], [97, 173, 90], [100, 176, 91]];
-      const hash = (x, y) => { let n = (x * 374761393 + y * 668265263) ^ 0x5bf03635; n = (n ^ (n >>> 13)) * 1274126177; return ((n ^ (n >>> 16)) >>> 0) / 4294967295 };
-      for (let y = 0; y < size; y++)for (let x = 0; x < size; x++) {
-        // Frequencies tripled so the colored patches are roughly one third of the
-        // previous size; an extra diagonal wave breaks the visible square rhythm.
-        const wave = Math.sin(x * .339 + Math.sin(y * .18) * 1.35) + Math.cos(y * .279 - Math.sin(x * .159) * 1.2) + Math.sin((x + y) * .141) * .48 + Math.cos((x - y) * .217) * .24;
-        let shade = wave < -.72 ? 0 : wave < .78 ? 1 : 2;
-        const grain = hash(x >> 1, y >> 1); if (grain > .975) shade++; else if (grain < .025) shade--;
-        shade = Math.max(0, Math.min(palette.length - 1, shade)); const color = palette[shade];
-        const offset = (y * size + x) * 4; pixels[offset] = color[0]; pixels[offset + 1] = color[1]; pixels[offset + 2] = color[2]; pixels[offset + 3] = 255;
-      }
-      context.putImageData(image, 0, 0); context.imageSmoothingEnabled = false;
-      const texture = new T.CanvasTexture(canvas); texture.magFilter = T.NearestFilter; texture.minFilter = T.NearestFilter; texture.generateMipmaps = false; if (T.sRGBEncoding) texture.encoding = T.sRGBEncoding; return texture;
+    const skyLight = new T.HemisphereLight(0xccecff, 0x365027, .68); scene.add(skyLight);
+    const sun = new T.DirectionalLight(0xffedaa, 1.22); sun.position.set(-18, 34, -14); sun.castShadow = true; sun.shadow.mapSize.set(512, 512); sun.shadow.bias = -.00035; sun.shadow.normalBias = .035;
+    const sc = sun.shadow.camera; sc.left = sc.bottom = -26; sc.right = sc.top = 26; sc.near = 5; sc.far = 75; scene.add(sun, sun.target);
+    const lightFocus = new T.Vector3(99999, 0, 99999);
+    function setLightingEffects(value) { lightingEffects = !!value; localStorage.setItem('arena-lighting-effects', lightingEffects ? '1' : '0'); skyLight.intensity = lightingEffects ? .68 : 1.05; sun.intensity = lightingEffects ? 1.22 : 0; sun.castShadow = lightingEffects; if (typeof setInfernoLightingEffects === 'function') setInfernoLightingEffects(lightingEffects); rs() }
+    function updateLightingFocus(position) { if (!lightingEffects || !position) return; const x = Math.round(position.x / 6) * 6, z = Math.round(position.z / 6) * 6; if (x === lightFocus.x && z === lightFocus.z) return; lightFocus.set(x, 0, z); sun.position.set(x - 18, 34, z - 14); sun.target.position.set(x, 0, z); sun.target.updateMatrixWorld(); ren.shadowMap.needsUpdate = true }
+    function loadRepeatingTexture(path, repeatX, repeatY, fallbackColor) {
+      // Start with a valid power-of-two canvas. Even if an old server cannot
+      // serve the PNG yet, the material remains colored instead of turning black.
+      const canvas = document.createElement('canvas'), context = canvas.getContext('2d');
+      canvas.width = canvas.height = 1024; context.fillStyle = fallbackColor; context.fillRect(0, 0, canvas.width, canvas.height);
+      const texture = new T.CanvasTexture(canvas);
+      texture.wrapS = texture.wrapT = T.RepeatWrapping; texture.repeat.set(repeatX, repeatY);
+      texture.magFilter = T.NearestFilter; texture.minFilter = T.NearestMipmapNearestFilter;
+      texture.userData = { sourceLoaded: false };
+      if (T.sRGBEncoding) texture.encoding = T.sRGBEncoding;
+      new T.ImageLoader().load(path, image => {
+        // The source art is 1254px. Drawing it without smoothing preserves its
+        // pixel-art edges while making RepeatWrapping compatible with WebGL 1.
+        context.imageSmoothingEnabled = false; context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height); texture.userData.sourceLoaded = true; texture.needsUpdate = true;
+      });
+      return texture;
     }
-    const groundTexture = makeGroundTexture();
+    const groundTexture = loadRepeatingTexture('textures/ch%C3%A3o.png', 8, 8, '#6eaa5b');
+    const trunkTexture = loadRepeatingTexture('textures/tronco.png', 1, 2, '#704326');
+    const pillarTexture = loadRepeatingTexture('textures/pilar.png', 1, 2, '#8a8982');
+    const leavesTexture = loadRepeatingTexture('textures/folhas.png', 2, 2, '#438b49');
+    const stoneTexture = loadRepeatingTexture('textures/pedras.png', 1, 1, '#858d89');
     const floor = new T.Mesh(new T.CircleGeometry(32, 96).rotateX(-Math.PI / 2), new T.MeshLambertMaterial({ map: groundTexture })); floor.receiveShadow = true; scene.add(floor);
     const arenaBoundary = new T.Mesh(new T.TorusGeometry(32, .5, 8, 80).rotateX(Math.PI / 2), mat(0x6b4a2c)); scene.add(arenaBoundary);
 
@@ -369,12 +397,12 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
     const sceneryRnd = (a, b) => a + sceneryRandom() * (b - a);
     const WALL = Array.from({ length: 96 }, (_, i) => { const a = i / 96 * Math.PI * 2, h = sceneryRnd(3.1, 4.5); return { a, r: 34.15 + sceneryRnd(-.25, .25), h, ry: a + sceneryRnd(-.08, .08) } });
     const placeWall = (d, i, scale = 1) => { const t = WALL[i]; d.position.set(Math.cos(t.a) * t.r * scale, t.h / 2 - .08, Math.sin(t.a) * t.r * scale); d.scale.set(1, t.h / 3.8, 1); d.rotation.set(0, t.ry, 0) };
-    const stone = mat(0x66706d), wall = inst(new T.CylinderGeometry(2.15, 2.35, 3.8, 6), stone, WALL.length, placeWall, true); wall.name = 'Muralha circular de blocos hexagonais'; wallMeshes.push(wall);
+    const stone = new T.MeshLambertMaterial({ map: stoneTexture, color: 0xffffff }), wall = inst(new T.CylinderGeometry(2.15, 2.35, 3.8, 6), stone, WALL.length, placeWall, true); wall.name = 'Muralha circular de blocos hexagonais'; wallMeshes.push(wall);
     const TR = Array.from({ length: 72 }, (_, i) => { const block = WALL[Math.floor(i * WALL.length / 72)], a = block.a + sceneryRnd(-.016, .016); return { a, r: block.r + sceneryRnd(-.35, .35), y: block.h - .12, s: sceneryRnd(.78, 1.28), ry: sceneryRnd(0, Math.PI * 2) } });
     const place = (d, i, scale = 1) => { const t = TR[i]; d.position.set(Math.cos(t.a) * t.r * scale, t.y, Math.sin(t.a) * t.r * scale); d.scale.setScalar(t.s); d.rotation.set(0, t.ry, 0) };
-    const trM = mat(0x5a3a22); sway(trM, 'position.y*.012', 1);
+    const trM = new T.MeshLambertMaterial({ map: trunkTexture, color: 0xffffff }); sway(trM, 'position.y*.012', 1);
     forestMeshes.push(inst(new T.CylinderGeometry(.4, .65, 4.5, 6).translate(0, 2.25, 0), trM, TR.length, place, true));
-    [[3.4, 4.2, 5.2, 0x2f6b3c], [2.7, 3.8, 7.6, 0x3a7d44], [1.8, 3.2, 9.6, 0x4a914d]].forEach(([r, h, y, c]) => { const m = mat(c); sway(m, 'position.y*.045', 1); forestMeshes.push(inst(new T.ConeGeometry(r, h, 7).translate(0, y, 0), m, TR.length, place, true)) });
+    [[3.4, 4.2, 5.2, 0xffffff], [2.7, 3.8, 7.6, 0xe8f5e5], [1.8, 3.2, 9.6, 0xd7ebd5]].forEach(([r, h, y, c]) => { const m = new T.MeshLambertMaterial({ map: leavesTexture, color: c }); sway(m, 'position.y*.045', 1); forestMeshes.push(inst(new T.ConeGeometry(r, h, 7).translate(0, y, 0), m, TR.length, place, true)) });
 
     // Low-poly flowers add color without creating hundreds of draw calls.
     const FLOWERS = Array.from({ length: 420 }, (_, i) => { const a = sceneryRnd(0, Math.PI * 2), r = Math.sqrt(sceneryRandom()) * 29.3; return { x: Math.cos(a) * r, z: Math.sin(a) * r, s: sceneryRnd(.7, 1.25), ry: sceneryRnd(0, Math.PI * 2), white: i % 5 < 2 } });
@@ -413,8 +441,8 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
     mech.add(mk(MB, 0, 0, 0), lL, lR, aL, aR); mech.scale.setScalar(.45); rig.add(mech); P.g.traverse(o => o.castShadow = true); P.g.position.copy(P.pos); scene.add(P.g);
     let over = false, paused = false, shake = 0;
     function showPausePanel(options = false) { document.getElementById('pause-main').hidden = options; document.getElementById('pause-options').hidden = !options }
-    function setPaused(value) { if (!started || over) return; paused = !!value; document.getElementById('pause-menu').hidden = !paused; document.body.classList.toggle('paused', paused); showPausePanel(false); if (paused) { PU.b.value = 0; if (document.pointerLockElement) document.exitPointerLock(); if (typeof clearInput === 'function') clearInput() } if (typeof updateAimCursor === 'function') updateAimCursor(); if(typeof updateCombatAudio==='function')updateCombatAudio() }
-    function hurt(n, f, tag, iv = 1) { if (parryCovers(f)) { parrySucc(tag); return } if (P.inv > 0 || over) return; P.hp -= n; P.inv = iv; const dx = P.pos.x - f.x, dz = P.pos.z - f.z, l = Math.hypot(dx, dz) || 1; P.kx = dx / l * 14; P.kz = dz / l * 14; shake = .5; burst(P.pos.x, 1.2, P.pos.z, 0xff4444, 10); if (P.hp <= 0) playerDied() }
+    function setPaused(value) { if (!started || over) return; paused = !!value; document.getElementById('pause-menu').hidden = !paused; document.body.classList.toggle('paused', paused); showPausePanel(false); if (paused) { PU.b.value = 0; if (document.pointerLockElement) document.exitPointerLock(); if (typeof clearInput === 'function') clearInput() } if (typeof updateAimCursor === 'function') updateAimCursor(); if (typeof updateCombatAudio === 'function') updateCombatAudio() }
+    function hurt(n, f, tag, iv = 1) { if (P.hp <= 0) return; if (parryCovers(f)) { parrySucc(tag); return } if (P.inv > 0 || over) return; P.hp -= n; P.inv = iv; const dx = P.pos.x - f.x, dz = P.pos.z - f.z, l = Math.hypot(dx, dz) || 1; P.kx = dx / l * 14; P.kz = dz / l * 14; shake = .5; burst(P.pos.x, 1.2, P.pos.z, 0xff4444, 10); if (P.hp <= 0) playerDied() }
     function finish(w) { over = true; matchWon = w; const m = document.getElementById('msg'); m.style.display = 'flex'; m.innerHTML = (w ? '🏆 Você venceu!' : '💀 Equipe derrotada') + '<small>Pressione R para jogar de novo</small>' }
 
     // ---- bullets
@@ -459,11 +487,11 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
       const sideX = Math.cos(B.h), sideZ = -Math.sin(B.h);
       for (let i = 0; i < count; i++) {
         const particle = burrowDustPool[burrowDustIndex++ % burrowDustPool.length], side = rnd(-1, 1), back = rnd(-.8, .35), life = rnd(.55, 1.05) * power;
-        particle.life = particle.max = life; particle.m.visible = true; particle.m.position.set(point.x + sideX * side * rnd(.2, 1.15) - Math.sin(B.h) * back, .12 + rnd(0, .18), point.z + sideZ * side * rnd(.2, 1.15) - Math.cos(B.h) * back);
+        particle.life = particle.max = life; particle.m.visible = true; const px = point.x + sideX * side * rnd(.2, 1.15) - Math.sin(B.h) * back, pz = point.z + sideZ * side * rnd(.2, 1.15) - Math.cos(B.h) * back; particle.m.position.set(px, Collision.heightAt(px, pz) + .12 + rnd(0, .18), pz);
         particle.v.set(sideX * side * rnd(1.5, 4.2) - Math.sin(B.h) * rnd(0, 2), rnd(2.5, 6.5) * power, sideZ * side * rnd(1.5, 4.2) - Math.cos(B.h) * rnd(0, 2)); particle.m.rotation.set(rnd(0, 3), rnd(0, 3), rnd(0, 3)); particle.m.scale.setScalar(rnd(.65, 1.45) * power)
       }
     }
-    function updateBurrowDust(dt) { for (const particle of burrowDustPool) { if (particle.life <= 0) continue; particle.life -= dt; if (particle.life <= 0) { particle.m.visible = false; continue } particle.v.y -= 13 * dt; particle.m.position.addScaledVector(particle.v, dt); if (particle.m.position.y < .08) { particle.m.position.y = .08; particle.v.y = Math.abs(particle.v.y) * .18; particle.v.x *= .82; particle.v.z *= .82 } particle.m.rotation.x += dt * 5; particle.m.rotation.z += dt * 4; particle.m.scale.multiplyScalar(Math.max(.01, 1 - dt * 1.3)) } }
+    function updateBurrowDust(dt) { for (const particle of burrowDustPool) { if (particle.life <= 0) continue; particle.life -= dt; if (particle.life <= 0) { particle.m.visible = false; continue } particle.v.y -= 13 * dt; particle.m.position.addScaledVector(particle.v, dt); const ground = Collision.heightAt(particle.m.position.x, particle.m.position.z) + .08; if (particle.m.position.y < ground) { particle.m.position.y = ground; particle.v.y = Math.abs(particle.v.y) * .18; particle.v.x *= .82; particle.v.z *= .82 } particle.m.rotation.x += dt * 5; particle.m.rotation.z += dt * 4; particle.m.scale.multiplyScalar(Math.max(.01, 1 - dt * 1.3)) } }
     function clearBurrowDust() { for (const particle of burrowDustPool) { particle.life = 0; particle.m.visible = false } }
 
     // ---- flyers
@@ -472,7 +500,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
       const h = B.chain[0], g = new T.Group(), fm = mat(0x44cc88, 0x114422), b = new T.Mesh(new T.SphereGeometry(.4, 10, 8), fm); b.castShadow = true; g.add(b);
       const ey = new T.Mesh(new T.SphereGeometry(.12, 6, 6), mat(0xff2222, 0xff0000)); ey.position.set(0, .1, .35); g.add(ey);
       const w = [-1, 1].map(x => { const p = new T.Group(), m = new T.Mesh(new T.BoxGeometry(1.1, .04, .6).translate(x * .55, 0, 0), mat(0xaaffcc, 0x226644)); p.add(m); g.add(p); return p });
-      g.position.set(h.x, FLYER_HEIGHT, h.z); scene.add(g); flyers.push({ g, hp: 20 * bossDifficulty.health, w, t: rnd(0, 9), a: rnd(0, 6.28), dir: Math.random() < .5 ? 1 : -1, cd: rnd(2, 4), dive: 0, v: new T.Vector3(rnd(-6, 6), 0, rnd(-6, 6)), f: 0, b })
+      g.position.set(h.x, Collision.heightAt(h.x, h.z) + FLYER_HEIGHT, h.z); scene.add(g); flyers.push({ g, hp: 20 * bossDifficulty.health, w, t: rnd(0, 9), a: rnd(0, 6.28), dir: Math.random() < .5 ? 1 : -1, cd: rnd(2, 4), dive: 0, v: new T.Vector3(rnd(-6, 6), 0, rnd(-6, 6)), f: 0, b })
     }
 
     function pickAttack() {
@@ -482,7 +510,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
     function beginBurrow() { const b = B, hd = b.chain[0]; b.state = 'burrow'; b.st = 0; b.dirtClock = 0; b.emergeHit = false; b.sp = 0; b.a0 = b.h; beam.visible = false; burst(hd.x, .2, hd.z, 0x805632, 26, 9); emitBurrowDust(hd, 22, 1.25); grassSystem.addImpact(hd, 7, 1.35); banner('A CENTOPEIA MERGULHOU!', 1200) }
     function beginBurrowEmerge() {
       const b = B, hd = b.chain[0]; b.state = 'emerge'; b.st = 0; b.emergeHit = true; burst(hd.x, .25, hd.z, 0x805632, 38, 12); emitBurrowDust(hd, 34, 1.5); grassSystem.addImpact(hd, 9, 1.55); infernoBossImpact(hd, 9); shake = Math.max(shake, 1.3);
-      forEachPlayer(() => { const distance = Math.hypot(P.pos.x - hd.x, P.pos.z - hd.z), before = P.hp; if (distance < 4.2 && P.pos.y < 2.4) hurt(30, hd, 'centipede', 1); if (P.hp < before) { const dx = P.pos.x - hd.x, dz = P.pos.z - hd.z, length = Math.hypot(dx, dz) || 1; P.kx = dx / length * 30; P.kz = dz / length * 30; P.vy = 12; P.ground = false } })
+      forEachPlayer(() => { const distance = Math.hypot(P.pos.x - hd.x, P.pos.z - hd.z), before = P.hp; if (distance < 4.2 && P.pos.y < Collision.heightAt(hd.x, hd.z) + 2.4) hurt(30, hd, 'centipede', 1); if (P.hp < before) { const dx = P.pos.x - hd.x, dz = P.pos.z - hd.z, length = Math.hypot(dx, dz) || 1; P.kx = dx / length * 30; P.kz = dz / length * 30; P.vy = 12; P.ground = false } })
     }
     const swA = (t, a0) => t < 1 ? a0 + 1.1 * sm(t) : t < 1.6 ? a0 + 1.1 - 2.4 * (1 - Math.pow(1 - (t - 1) / .6, 3)) : a0 - 1.3;
 
@@ -505,7 +533,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
         const wd = f ? .38 * (1 + .15 * Math.sin(b.t * 60)) : .05; beam.scale.set(wd, wd, L); beam.material.opacity = f ? .85 : .4;
         if (f && !over) {
           const rx = P.pos.x - hd.x, rz = P.pos.z - hd.z, t = rx * dx + rz * dz, dist = Math.abs(rx * dz - rz * dx);
-          forEachPlayer(() => { const rx = P.pos.x - hd.x, rz = P.pos.z - hd.z, t = rx * dx + rz * dz, dist = Math.abs(rx * dz - rz * dx); if (t > 0 && t < L && dist < .8 && P.pos.y < 1.35) { P.hp -= 32 * dt / bossDifficulty.attacks; shake = .25; if (P.hp <= 0) playerDied() } })
+          forEachPlayer(() => { const rx = P.pos.x - hd.x, rz = P.pos.z - hd.z, t = rx * dx + rz * dz, dist = Math.abs(rx * dz - rz * dx); if (t > 0 && t < L && dist < .8 && P.pos.y < Collision.heightAt(P.pos.x, P.pos.z) + 1.35) { P.hp -= 32 * dt / bossDifficulty.attacks; shake = .25; if (P.hp <= 0) playerDied() } })
         }
         if (b.st > 3.5) done()
       }
@@ -527,7 +555,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
         if (b.state === 'burrow') burrowDepth = 4 * sm(Math.max(0, Math.min(1, (b.st - i * .022) / .65)));
         else if (b.state === 'underground') burrowDepth = 4;
         else if (b.state === 'emerge') burrowDepth = 4 * (1 - sm(Math.max(0, Math.min(1, (b.st - i * .025) / .68))));
-        y -= burrowDepth;
+        y += Collision.heightAt(b.disp[i].x, b.disp[i].z) - burrowDepth;
         if (sw && i > K0) y += w * (t < 1 ? 1.6 * sm(t) : .3) * ((i - K0) / 10); b.Y[i] = y
       }
       for (let i = 0; i < N; i++) {
@@ -540,9 +568,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
       h.ant.forEach(a => { a.rotation.y = a.userData.sd * (.3 + Math.sin(b.t * 3) * .15); a.rotation.x = -.4 + Math.sin(b.t * 2.3 + a.userData.sd) * .15 });
       h.glow.scale.setScalar(.05 + b.mouth * .5 * (1 + .15 * Math.sin(b.t * 30)));
       h.eyes.forEach(e => e.scale.setScalar(1 + b.mouth * .5));
-      // contato com o jogador
-      forEachPlayer(() => { for (let i = 0; i < N; i++) { const p = b.disp[i]; if (Math.hypot(P.pos.x - p.x, P.pos.z - p.z) < b.segs[i].s * .8 + .45 && P.pos.y < b.Y[i] + .9) { hurt(i == 0 ? 15 : 10, p); break } } })
-      if (b.state == 'swipe' && t > 1 && t < 1.65) forEachPlayer(() => { for (let j = K0 + 1; j < N; j++) { const p = b.disp[j]; if (Math.hypot(P.pos.x - p.x, P.pos.z - p.z) < 1.2 && P.pos.y < 1.7) { hurt(22, p); break } } })
+      if (b.state == 'swipe' && t > 1 && t < 1.65) forEachPlayer(() => { for (let j = K0 + 1; j < N; j++) { const p = b.disp[j]; if (Math.hypot(P.pos.x - p.x, P.pos.z - p.z) < 1.2 && P.pos.y < b.Y[j] + .8) { hurt(22, p); break } } })
     }
 
     // ---- exército de esqueletos (segundo boss)
@@ -551,6 +577,11 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
       arG = new T.BoxGeometry(.06, .06, 1.1).translate(0, 0, .1), arM = new T.MeshBasicMaterial({ color: 0xffcc66 }),
       lineM = new T.MeshBasicMaterial({ color: 0xff2244, transparent: true, opacity: .5, depthWrite: false });
     let uid = 0;
+    function enemySpawnPoint(minDistance = infernoMode ? 58 : Math.min(28, arenaRadius * .62), maxDistance = infernoMode ? 86 : Math.min(arenaRadius - 5, minDistance + 12)) {
+      const living = [...players.values()].filter(player => player.hp > 0), anchor = (living[Math.floor(Math.random() * Math.max(1, living.length))] || P).pos;
+      for (let attempt = 0; attempt < 80; attempt++) { const angle = rnd(0, Math.PI * 2), distance = rnd(minDistance, maxDistance), x = anchor.x + Math.sin(angle) * distance, z = anchor.z + Math.cos(angle) * distance; if (Math.hypot(x, z) > arenaRadius - 6) continue; if (living.every(player => Math.hypot(x - player.pos.x, z - player.pos.z) >= minDistance)) return new T.Vector3(x, Collision.heightAt(x, z), z) }
+      const angle = Math.atan2(-anchor.x, -anchor.z), distance = Math.min(arenaRadius - 6, Math.max(minDistance, arenaRadius * .72)), x = Math.sin(angle) * distance, z = Math.cos(angle) * distance; return new T.Vector3(x, Collision.heightAt(x, z), z)
+    }
     function mkSkel(type) {
       const g = new T.Group(), r = new T.Group(), u = { type, g, r, id: uid++, hp: (type == 'w' ? 40 : type == 'a' ? 20 : 30) * bossDifficulty.health, ph: 0, state: 'walk', st: 0, cd: rnd(.5, 2), f: 0, rise: 0, dead: 0, face: 0, hit: 0, sd: Math.random() < .5 ? 1 : -1, lock: 0 };
       g.add(r);
@@ -580,9 +611,8 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
       A.wave++; const c = W[A.wave], multiplier = armySizeMultiplier();
       ['w', 'a', 'h'].forEach((t, k) => {
         for (let i = 0; i < c[k] * multiplier; i++) {
-          const u = mkSkel(t); let x, z, n = 0;
-          do { const a = rnd(0, 6.283); x = Math.sin(a) * (arenaRadius - 6); z = Math.cos(a) * (arenaRadius - 6) } while (Math.hypot(x - P.pos.x, z - P.pos.z) < 12 && n++ < 20);
-          u.rise = -rnd(0, .7); u.g.position.set(x, -2.2, z); scene.add(u.g); A.u.push(u)
+          const u = mkSkel(t), spawn = enemySpawnPoint();
+          u.rise = -rnd(0, .7); u.g.position.set(spawn.x, spawn.y - 2.2, spawn.z); scene.add(u.g); A.u.push(u)
         }
       })
     }
@@ -598,7 +628,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
       for (let i = A.u.length - 1; i >= 0; i--) {
         const u = A.u[i], g = u.g;
         if (u.dead) { u.dead += dt; g.rotation.x = -Math.min(1.5, u.dead * 5); if (u.dead > .8) g.position.y -= dt * 2; if (u.dead > 1.6) { scene.remove(g); A.u.splice(i, 1) } continue }
-        if (u.rise < 1) { u.rise += dt * .8; g.position.y = -2.2 * (1 - sm(Math.min(1, Math.max(0, u.rise)))); continue }
+        if (u.rise < 1) { u.rise += dt * .8; g.position.y = Collision.heightAt(g.position.x, g.position.z) - 2.2 * (1 - sm(Math.min(1, Math.max(0, u.rise)))); continue }
         selectTarget(g.position, u, dt / bossDifficulty.attacks);
         const dx = P.pos.x - g.position.x, dz = P.pos.z - g.position.z, d = Math.hypot(dx, dz), ang = Math.atan2(dx, dz);
         let mx = 0, mz = 0, tf = ang, posed = false, lean = 0; u.f = Math.max(0, u.f - dt); u.cd -= dt;
@@ -606,7 +636,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
           if (u.state == 'walk') { tf = ang + Math.sin(A.t * 2 + u.id) * .3; if (d > 1.6) { mx = Math.sin(tf) * 5.5; mz = Math.cos(tf) * 5.5 } if (d < 2 && u.cd <= 0) { u.state = 'atk'; u.st = 0; u.hit = 0 } }
           else {
             posed = true; u.st += dt; const s = u.st; u.aR.rotation.x = s < .4 ? -2.5 * sm(s / .4) : -2.5 + 3.8 * sm(Math.min(1, (s - .4) / .12)); u.aL.rotation.x = -.8;
-            if (s > .5 && !u.hit) { u.hit = 1; if (d < 2.4 && P.pos.y < 1.6) hurt(10, g.position) } if (s > 1) { u.state = 'walk'; u.cd = 1.1 }
+            if (s > .5 && !u.hit) { u.hit = 1; if (d < 2.4 && P.pos.y < g.position.y + 1.6) hurt(10, g.position) } if (s > 1) { u.state = 'walk'; u.cd = 1.1 }
           }
         } else if (u.type == 'a') {
           if (u.state == 'walk') {
@@ -618,7 +648,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
             posed = true; u.st += dt; u.aL.rotation.x = -1.5; u.aR.rotation.x = -1.5 + Math.min(1, u.st) * .4; u.sk.rotation.x = .1;
             if (u.st > 1.1) {
               const l = .45 * d / 20, ax = P.pos.x + P.vx * l - g.position.x, az = P.pos.z + P.vz * l - g.position.z, al = Math.hypot(ax, az) || 1;
-              const m = new T.Mesh(arG, arM); m.position.set(g.position.x + ax / al, 1.4, g.position.z + az / al); m.rotation.y = Math.atan2(ax, az); scene.add(m);
+              const m = new T.Mesh(arG, arM); m.position.set(g.position.x + ax / al, g.position.y + 1.4, g.position.z + az / al); m.rotation.y = Math.atan2(ax, az); scene.add(m);
               EP.push({ m, v: new T.Vector3(ax / al * 20, 0, az / al * 20), l: 3, k: 'a', o: 'e', t: 0, dmg: 8 }); u.state = 'walk'; u.cd = rnd(2, 3.2)
             }
           }
@@ -631,12 +661,12 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
           }
           else if (u.state == 'dash') {
             posed = true; u.st += dt; tf = u.lock; mx = Math.sin(u.lock) * 26; mz = Math.cos(u.lock) * 26; lean = .5; u.aL.rotation.x = u.aR.rotation.x = 1.1;
-            if (!u.hit && d < 1.4 && P.pos.y < 1.4) { u.hit = 1; hurt(16, g.position) }
-            if (u.st > 1 || Math.hypot(g.position.x, g.position.z) > 29.5) { u.state = 'rest'; u.st = 0 }
+            if (!u.hit && d < 1.4 && P.pos.y < g.position.y + 1.4) { u.hit = 1; hurt(16, g.position) }
+            if (u.st > 1 || Math.hypot(g.position.x, g.position.z) > arenaRadius - 2.5) { u.state = 'rest'; u.st = 0 }
           }
           else { u.st += dt; lean = -.15; if (u.st > 1.4) { u.state = 'walk'; u.cd = rnd(1, 2.5) } }
         }
-        const moveDt = bossMovementTime(dt); g.position.x += mx * moveDt; g.position.z += mz * moveDt; const rr = Math.hypot(g.position.x, g.position.z); if (rr > arenaRadius - 1) { g.position.x *= (arenaRadius - 1) / rr; g.position.z *= (arenaRadius - 1) / rr }
+        const moveDt = bossMovementTime(dt); g.position.x += mx * moveDt; g.position.z += mz * moveDt; Collision.resolve(g.position, .62, arenaRadius, { ground: true });
         u.face += ad(u.face, tf) * Math.min(1, moveDt * (u.state == 'dash' ? 30 : 9)); g.rotation.y = u.face;
         const sp = Math.hypot(mx, mz), am = Math.min(1, sp / 6); u.ph += sp * moveDt * 1.3;
         if (u.legs) { u.legs[0].rotation.x = Math.sin(u.ph) * .8 * am; u.legs[1].rotation.x = -u.legs[0].rotation.x }
@@ -676,8 +706,8 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
     const shieldBand = new T.Mesh(new T.TorusGeometry(2.15, .045, 5, 32), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .7, blending: T.AdditiveBlending, depthWrite: false })); shieldBand.rotation.x = Math.PI / 2; ring.add(shieldWire, shieldBand); ring.visible = false; scene.add(ring);
     addEventListener('contextmenu', e => e.preventDefault());
     function banner(t, ms = 3500) { const n = document.getElementById('bn'); n.textContent = t; n.style.display = 'block'; clearTimeout(banner.h); banner.h = setTimeout(() => n.style.display = 'none', ms) }
-    function startRobot() { R.on = true; golemSpawnSerial++; scene.add(rg); rg.position.set(0, 14, -20); healTeam(); document.getElementById('bb').style.background = '#4af'; banner('🤖 Terceiro boss: Golem Mecânico!'); if(typeof playGolemSpawnSound==='function')playGolemSpawnSound() }
-    function picks() { const l = []; if (!B.dead) B.segs.forEach(s => l.push(s.root)); flyers.forEach(f => l.push(f.g)); A.u.forEach(u => { if (!u.dead && u.rise >= 1) l.push(u.g) }); if (R.on && !R.dead) l.push(rg); if (E.on && !E.dead) l.push(eg); return l }
+    function startRobot() { R.on = true; rg.visible = true; golemSpawnSerial++; scene.add(rg); rg.position.set(0, 14, -20); healTeam(); document.getElementById('bb').style.background = '#4af'; banner('🤖 Terceiro boss: Golem Mecânico!'); if (typeof playGolemSpawnSound === 'function') playGolemSpawnSound() }
+    function picks() { const l = []; if (!B.dead) B.segs.forEach(s => l.push(s.root)); flyers.forEach(f => l.push(f.g)); A.u.forEach(u => { if (!u.dead && u.rise >= 1) l.push(u.g) }); if (R.on && !R.dead) l.push(rg); if (E.on && !E.dead) l.push(eg); if (infernoMode) for (const layers of Object.values(infernoPropMeshes)) for (const layer of layers) l.push(layer.mesh); return l }
     function robotHurt(d, raw) { if (R.dead) return; R.hp -= raw ? d : d * (R.stun > 0 ? 1.6 : .3); R.f = .12; if (R.hp <= 0) { R.hp = 0; R.dead = true; R.dt = 0; R.stun = 0; EP.forEach(p => scene.remove(p.m)); EP.length = 0; shake = 2 } }
     function skelHurt(u, d, quiet = false) { u.hp -= d; u.f = .15; if (!quiet) burst(u.g.position.x, 1.2, u.g.position.z, 0xeeeecc, 5, 4); if (u.hp <= 0 && !u.dead) { u.dead = .001; A.killed++ } }
     // O campo de força do parry protege igualmente em todas as direções.
@@ -693,7 +723,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
       if (tag === 'ettin' && E.on && !E.dead && E.stun <= 0) { E.par++; if (E.par >= 4) { E.stun = 6.5; E.par = 4; E.state = 'stagger'; E.time = 0; E.velocity.set(0, 0, 0); E.pending = null; ettinWarning.visible = ettinCone.visible = false; burst(eg.position.x, 3.5, eg.position.z, 0xffdd55, 40, 14); shake = 2; banner('⚡ ETTIN VULNERÁVEL! ATAQUE!', 2500) } }
     }
     function reflect(p) {
-      const q = p.m.position; if (p.k == 'm' && R.on && !R.dead) tmp.set(rg.position.x - q.x, 4 - q.y, rg.position.z - q.z); else tmp.set(aim.x - q.x, aimY - q.y, aim.z - q.z);
+      const q = p.m.position; if (p.k == 'm' && R.on && !R.dead) tmp.set(rg.position.x - q.x, rg.position.y + 4 - q.y, rg.position.z - q.z); else tmp.set(aim.x - q.x, aimY - q.y, aim.z - q.z);
       p.v.copy(tmp).normalize().multiplyScalar(p.k == 'm' ? 22 : 32); p.o = 'p'; p.l = 4; p.t = 1; p.m.traverse(o => { if (o.material) o.material = refM })
     }
     function updParry(dt) {
@@ -714,7 +744,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
       const dP = Math.hypot(q.x - P.pos.x, q.y - P.pos.y - 1, q.z - P.pos.z); shake = Math.max(shake, Math.min(1, 3.5 / (dP + 1)));
       if (own == 'e') { infernoBossImpact(q, 7); forEachPlayer(() => { if (Math.hypot(q.x - P.pos.x, q.y - P.pos.y - 1, q.z - P.pos.z) < 3.4) hurt(20, q, 'r') }) }
       else {
-        if (R.on && !R.dead && Math.hypot(q.x - rg.position.x, q.z - rg.position.z) < 4.5 && q.y < 9) robotHurt(120, true);
+        if (R.on && !R.dead && Math.hypot(q.x - rg.position.x, q.z - rg.position.z) < 4.5 && q.y < rg.position.y + 9) robotHurt(120, true);
         A.u.forEach(u => { if (!u.dead && u.rise >= 1 && Math.hypot(q.x - u.g.position.x, q.z - u.g.position.z) < 3.5) skelHurt(u, 60) })
       }
     }
@@ -737,22 +767,22 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
         const p = EP[i], m = p.m, q = m.position; let end = false, bm = false; p.t += dt; p.l -= dt; if (p.l <= 0) end = true;
         if (p.k == 'm') {
           if (p.o == 'e' && p.t > .55) { const target = players.get(p.targetId); if (target && target.hp > 0) P = target; else { selectTarget(q); p.targetId = P.id } tmp.set(P.pos.x - q.x, P.pos.y + 1 - q.y, P.pos.z - q.z).normalize(); p.v.normalize().lerp(tmp, Math.min(1, 2.4 * dt)).normalize().multiplyScalar(p.sp) }
-          else if (p.o == 'p' && R.on && !R.dead) { tmp.set(rg.position.x - q.x, 4 - q.y, rg.position.z - q.z).normalize(); p.v.normalize().lerp(tmp, Math.min(1, 6 * dt)).normalize().multiplyScalar(22) }
+          else if (p.o == 'p' && R.on && !R.dead) { tmp.set(rg.position.x - q.x, rg.position.y + 4 - q.y, rg.position.z - q.z).normalize(); p.v.normalize().lerp(tmp, Math.min(1, 6 * dt)).normalize().multiplyScalar(22) }
           m.lookAt(q.x + p.v.x, q.y + p.v.y, q.z + p.v.z); if (Math.random() < .5) burst(q.x, q.y, q.z, 0x999999, 1, 1)
         }
         q.addScaledVector(p.v, dt);
         if (p.o == 'e') selectTarget(q);
         if (p.o == 'e') {
           const dd = Math.hypot(q.x - P.pos.x, q.y - P.pos.y - 1, q.z - P.pos.z);
-          if (p.k == 'm') { if (dd < 1.5 || q.y < .25) bm = true } else if (dd < .8 && !over) { hurt(p.dmg, q, p.tag, p.k == 'g' ? .2 : 1); end = true }
+          if (p.k == 'm') { if (dd < 1.5 || q.y < Collision.heightAt(q.x, q.z) + .25) bm = true } else if (dd < .8 && !over) { hurt(p.dmg, q, p.tag, p.k == 'g' ? .2 : 1); end = true }
         }
         else {
-          if (R.on && !R.dead && Math.hypot(q.x - rg.position.x, q.z - rg.position.z) < 3.4 && q.y > 0 && q.y < 8.5) { if (p.k == 'm') bm = true; else { robotHurt(p.k == 'g' ? 8 : 15); end = true; burst(q.x, q.y, q.z, 0x88eeff, 4, 5) } }
-          else for (const u of A.u) if (!u.dead && u.rise >= 1 && Math.hypot(q.x - u.g.position.x, q.z - u.g.position.z) < 1.1 && q.y < 2.4) { if (p.k == 'm') bm = true; else { skelHurt(u, 30); end = true } break }
-          if (p.k == 'm' && q.y < .25) bm = true
+          if (R.on && !R.dead && Math.hypot(q.x - rg.position.x, q.z - rg.position.z) < 3.4 && q.y > rg.position.y && q.y < rg.position.y + 8.5) { if (p.k == 'm') bm = true; else { robotHurt(p.k == 'g' ? 8 : 15); end = true; burst(q.x, q.y, q.z, 0x88eeff, 4, 5) } }
+          else for (const u of A.u) if (!u.dead && u.rise >= 1 && Math.hypot(q.x - u.g.position.x, q.z - u.g.position.z) < 1.1 && q.y < u.g.position.y + 2.4) { if (p.k == 'm') bm = true; else { skelHurt(u, 30); end = true } break }
+          if (p.k == 'm' && q.y < Collision.heightAt(q.x, q.z) + .25) bm = true
         }
         if (bm) { boom(q, p.o); end = true }
-        if (q.y < 0 || Math.hypot(q.x, q.z) > arenaRadius + 13) end = true;
+        if (q.y < Collision.heightAt(q.x, q.z) || Math.hypot(q.x, q.z) > arenaRadius + 13) end = true;
         if (end) { scene.remove(m); EP.splice(i, 1) }
       }
     }
@@ -760,7 +790,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
       if (!R.on) return; const p = rg.position; R.t += dt; R.f = Math.max(0, R.f - dt);
       if (R.dead) {
         R.dt += dt; if (Math.random() < dt * 25) { burst(p.x + rnd(-3, 3), rnd(1, 7), p.z + rnd(-3, 3), Math.random() < .5 ? 0xff8822 : 0xffee88, 8, 10); shake = .6 }
-        rUp.rotation.z += dt * .3; p.y = -Math.max(0, R.dt - 2) * 2; if (R.dt > 3.2 && !R.deathComplete && !over) { R.deathComplete = true; scene.remove(rg); burst(p.x, 3, p.z, 0xff8822, 60, 16); if (MODE === 0 && !finalEncounter) startFinalEncounter(); else if (!finalEncounter) finish(true) } return
+        rUp.rotation.z += dt * .3; const ground = Collision.heightAt(p.x, p.z); p.y = ground - Math.max(0, R.dt - 2) * 2; if (R.dt > 3.2 && !R.deathComplete && !over) { R.deathComplete = true; scene.remove(rg); burst(p.x, ground + 3, p.z, 0xff8822, 60, 16); if (MODE === 0 && !finalEncounter) startFinalEncounter(); else if (!finalEncounter) finish(true) } return
       }
       const dx = P.pos.x - p.x, dz = P.pos.z - p.z, d = Math.hypot(dx, dz), ang = Math.atan2(dx, dz), rage = R.hp < R.max * .5 ? 1.3 : 1;
       let tf = ang, hov = 1, open = 0, spin = 0, armT = -.3, ax = 0, az = 0, fric = 2.5;
@@ -771,7 +801,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
         while (R.barrage <= 0) { R.barrage += .32; rg.updateMatrixWorld(true); for (const target of players.values()) if (target.hp > 0) fireMissile(R.barrageIndex++, target) }
         if (R.stun <= 0) R.state = 'desperate';
       }
-      if (R.state == 'land') { R.st += dt; p.y = 14 * Math.pow(Math.max(0, 1 - R.st / 1.2), 2); hov = .6; if (R.st > 1.2) { p.y = 0; shake = 1.5; burst(p.x, .5, p.z, 0xcccccc, 34, 11); grassSystem.addImpact(p, 11, 1.45); infernoBossImpact(p, 13); R.state = 'idle'; R.st = 0 } }
+      if (R.state == 'land') { R.st += dt; const ground = Collision.heightAt(p.x, p.z); p.y = ground + 14 * Math.pow(Math.max(0, 1 - R.st / 1.2), 2); hov = .6; if (R.st > 1.2) { p.y = ground; shake = 1.5; burst(p.x, ground + .5, p.z, 0xcccccc, 34, 11); grassSystem.addImpact(p, 11, 1.45); infernoBossImpact(p, 13); R.state = 'idle'; R.st = 0 } }
       else if (R.stun > 0) { R.stun -= dt; hov = .2; fric = 2; armT = .5; if (Math.random() < dt * 16) burst(p.x + rnd(-2.5, 2.5), rnd(1, 6), p.z + rnd(-2.5, 2.5), 0xffdd55, 2, 5); if (R.stun <= 0) { R.par = 0; pick() } }
       else {
         R.st += dt;
@@ -780,7 +810,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
         else if (R.state == 'slide') {
           if (R.st < .8) { hov = .35; fric = 6; R.lock = ang }
           else { const k = R.st - .8; tf = R.lock; if (k < .5) { ax = Math.sin(R.lock) * 70; az = Math.cos(R.lock) * 70; fric = .4 } else fric = 1.2; if (R.st > 2.4) pick() }
-          if (Math.hypot(R.vx, R.vz) > 6) { R.destroyClock=(R.destroyClock||0)-dt;if(R.destroyClock<=0){R.destroyClock=.12;infernoBossImpact(p,4.5)} forEachPlayer(() => { if (P.pos.distanceTo(p) < 3.9 && P.pos.y < 1.8) hurt(20, p, 'r') }) }
+          if (Math.hypot(R.vx, R.vz) > 6) { R.destroyClock = (R.destroyClock || 0) - dt; if (R.destroyClock <= 0) { R.destroyClock = .12; infernoBossImpact(p, 4.5) } forEachPlayer(() => { if (P.pos.distanceTo(p) < 3.9) hurt(20, p, 'r') }) }
         }
         else if (R.state == 'missile') {
           hov = 1.5; open = 1; fric = 3; ax = Math.cos(ang) * R.sd * 9; az = -Math.sin(ang) * R.sd * 9;
@@ -792,7 +822,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
         }
       }
       const moveDt = bossMovementTime(dt); R.vx += ax * dt; R.vz += az * dt; const fk = Math.exp(-fric * dt); R.vx *= fk; R.vz *= fk; p.x += R.vx * moveDt; p.z += R.vz * moveDt;
-      const rr = Math.hypot(p.x, p.z); if (rr > arenaRadius - 5) { const nx = p.x / rr, nz = p.z / rr, vo = R.vx * nx + R.vz * nz; if (vo > 0) { R.vx -= nx * vo * 1.5; R.vz -= nz * vo * 1.5 } p.x = nx * (arenaRadius - 5); p.z = nz * (arenaRadius - 5) }
+      const rr = Math.hypot(p.x, p.z); if (rr > arenaRadius - 5) { const nx = p.x / rr, nz = p.z / rr, vo = R.vx * nx + R.vz * nz; if (vo > 0) { R.vx -= nx * vo * 1.5; R.vz -= nz * vo * 1.5 } } Collision.resolve(p, 3.4 * Math.max(1, rg.scale.x), arenaRadius, { obstacles: false }); if (R.state !== 'land') p.y = Collision.heightAt(p.x, p.z);
       R.face += ad(R.face, tf) * Math.min(1, moveDt * (R.state == 'slide' && R.st > .8 ? 12 : 4)); rg.rotation.y = R.face;
       const sp = Math.hypot(R.vx, R.vz), kk = Math.min(1, dt * 6); if (sp > 8 && Math.random() < dt * 40) burst(p.x + rnd(-2.5, 2.5), .1, p.z + rnd(-2.5, 2.5), 0xffbb44, 1, 4);
       R.hover += (hov - R.hover) * Math.min(1, dt * 5); R.open += (open - R.open) * kk; R.dr += ((R.stun > 0 ? 1 : 0) - R.dr) * kk; R.spin += spin * dt * 28;
@@ -820,9 +850,9 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
         const gliding = P.glideTime > 0 && !P.ground;
         P.vy -= (gliding ? GLIDE_GRAVITY : 30) * dt; if (gliding && P.vy < -GLIDE_FALL_CAP) P.vy = -GLIDE_FALL_CAP;
         if (gliding && Math.random() < dt * 20) burst(P.pos.x, P.pos.y + .4, P.pos.z, 0x88ddff, 1, 2);
-        const groundY = terrainHeightAt(P.pos.x, P.pos.z); P.pos.y += P.vy * dt; if (P.pos.y <= groundY) { if (!P.ground) P.land = .25; P.pos.y = groundY; P.vy = 0; P.ground = true }
+        const groundY = Collision.heightAt(P.pos.x, P.pos.z); P.pos.y += P.vy * dt; if (P.pos.y <= groundY) { if (!P.ground) P.land = .25; P.pos.y = groundY; P.vy = 0; P.ground = true }
         P.kx *= Math.max(0, 1 - dt * 6); P.kz *= Math.max(0, 1 - dt * 6);
-        const boosting = updateDash(dt, input, ix, iz); P.pos.x += (boosting ? P.kx : P.vx + P.kx) * dt; P.pos.z += (boosting ? P.kz : P.vz + P.kz) * dt; const r = Math.hypot(P.pos.x, P.pos.z); if (r > arenaRadius - 1.5) { P.pos.x *= (arenaRadius - 1.5) / r; P.pos.z *= (arenaRadius - 1.5) / r }
+        const boosting = updateDash(dt, input, ix, iz); P.pos.x += (boosting ? P.kx : P.vx + P.kx) * dt; P.pos.z += (boosting ? P.kz : P.vz + P.kz) * dt; Collision.resolve(P.pos, .65, arenaRadius, { ground: P.ground });
         applySpecial(dt);
         P.fire -= dt; if (specialLocked && P.laserBeam) { P.laserTime = 0; P.laserBeam.visible = false } else if (usingLaser) fireLaser(dt); else if (!specialLocked && sh && P.fire <= 0) { performAttack(); P.fire = characterInfo(P.character).interval }
         const sp = Math.hypot(P.vx, P.vz), tf = sh ? Math.atan2(aim.x - P.pos.x, aim.z - P.pos.z) : (sp > .5 ? Math.atan2(P.vx, P.vz) : P.face);
@@ -847,7 +877,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
     const camT = new T.Vector3(0, 30, 36), look = new T.Vector3();
     function loop() {
       requestAnimationFrame(loop); let dt = Math.min(.05, clock.getDelta());
-      if (!started) { cam.position.set(0, 30, 37); cam.lookAt(0, 0, 20); WT.value = performance.now() / 1000; grassSystem.update(dt, []); ren.setRenderTarget(rt); ren.render(scene, cam); ren.setRenderTarget(null); ren.render(pS, pC); return } if (paused) { ren.setRenderTarget(rt); ren.render(scene, cam); ren.setRenderTarget(null); ren.render(pS, pC); return } if (guestOnly) { guestFrame(dt); return } if (hs > 0) { hs -= dt; dt *= .06 }
+      if (!started) { cam.position.set(0, 30, 37); cam.lookAt(0, 0, 20); updateLightingFocus(P.pos); WT.value = performance.now() / 1000; grassSystem.update(dt, []); ren.setRenderTarget(rt); ren.render(scene, cam); ren.setRenderTarget(null); ren.render(pS, pC); return } if (paused) { ren.setRenderTarget(rt); ren.render(scene, cam); ren.setRenderTarget(null); ren.render(pS, pC); return } if (guestOnly) { guestFrame(dt); return } if (hs > 0) { hs -= dt; dt *= .06 }
       P = localPlayer;
       ray.setFromCamera(cameraAimPoint(), cam); { const hh = ray.intersectObjects(picks(), true).find(h => h.object.material !== lineM); if (hh) aim.copy(hh.point); else if (cameraMode === 'isometric' && ray.ray.intersectPlane(plane, tmp)) aim.copy(tmp); else aim.copy(ray.ray.direction).multiplyScalar(70).add(ray.ray.origin); aimY = aim.y }
       simulatePlayers(dt);
@@ -858,7 +888,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
       }
       // balas
       for (let i = bullets.length - 1; i >= 0; i--) {
-        const b = bullets[i]; b.m.position.addScaledVector(b.d, 40 * dt); b.l -= dt; let hit = b.l <= 0 || b.m.position.y < 0;
+        const b = bullets[i]; b.m.position.addScaledVector(b.d, 40 * dt); b.l -= dt; let hit = b.l <= 0 || b.m.position.y < Collision.heightAt(b.m.position.x, b.m.position.z) || hitInfernoPropAtPoint(b.m.position, .2);
         if (!hit && !B.dead) for (let j = 0; j < N; j++) {
           const p = B.disp[j], s = B.segs[j]; if (Math.hypot(b.m.position.x - p.x, b.m.position.z - p.z) < .8 * s.s + .25 && Math.abs(b.m.position.y - B.Y[j]) < .9 * s.s + .3) {
             B.hp -= j == 0 ? 15 : 8; s.f = .8; hit = true; burst(b.m.position.x, b.m.position.y, b.m.position.z, 0xffcc44, 4, 4); if (B.hp <= 0) { B.hp = 0; B.dead = true; B.state = 'dead'; flyers.forEach(f => { scene.remove(f.g) }); flyers.length = 0 } break
@@ -871,11 +901,11 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
           }
         }
         if (!hit) for (const u of A.u) {
-          if (!u.dead && u.rise >= 1 && Math.hypot(b.m.position.x - u.g.position.x, b.m.position.z - u.g.position.z) < .8 && b.m.position.y < 2.2) {
+          if (!u.dead && u.rise >= 1 && Math.hypot(b.m.position.x - u.g.position.x, b.m.position.z - u.g.position.z) < .8 && b.m.position.y < u.g.position.y + 2.2) {
             u.hp -= 10; u.f = .15; hit = true; burst(b.m.position.x, b.m.position.y, b.m.position.z, 0xeeeecc, 5, 4); if (u.hp <= 0) { u.dead = .001; A.killed++; burst(u.g.position.x, 1.2, u.g.position.z, 0xeeeecc, 12, 6) } break
           }
         }
-        if (!hit && R.on && !R.dead && Math.hypot(b.m.position.x - rg.position.x, b.m.position.z - rg.position.z) < 3.3 && b.m.position.y > .3 && b.m.position.y < 8.5) { robotHurt(10); hit = true; burst(b.m.position.x, b.m.position.y, b.m.position.z, R.stun > 0 ? 0xffdd55 : 0xcccccc, 4, 5) }
+        if (!hit && R.on && !R.dead && Math.hypot(b.m.position.x - rg.position.x, b.m.position.z - rg.position.z) < 3.3 && b.m.position.y > rg.position.y + .3 && b.m.position.y < rg.position.y + 8.5) { robotHurt(10); hit = true; burst(b.m.position.x, b.m.position.y, b.m.position.z, R.stun > 0 ? 0xffdd55 : 0xcccccc, 4, 5) }
         if (!hit && E.on && !E.dead && Math.hypot(b.m.position.x - eg.position.x, b.m.position.z - eg.position.z) < 2.7 && b.m.position.y > eg.position.y && b.m.position.y < eg.position.y + 7) { ettinHurt(10); hit = true; burst(b.m.position.x, b.m.position.y, b.m.position.z, 0xffaa44, 4, 5) }
         if (hit) { scene.remove(b.m); bullets.splice(i, 1) }
       }
@@ -884,30 +914,30 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
         selectTarget(f.g.position, f, dt); f.t += dt; f.a += dt * 1.2 * f.dir; f.cd -= dt; if (f.cd < 0) { f.dive = 1; f.cd = rnd(3, 5) } f.dive = Math.max(0, f.dive - dt);
         if (f.dive > 0) tmp.set(P.pos.x, FLYER_HEIGHT, P.pos.z); else tmp.set(P.pos.x + Math.cos(f.a) * 4.5, FLYER_HEIGHT, P.pos.z + Math.sin(f.a) * 4.5);
         f.v.addScaledVector(tmp.sub(f.g.position), (f.dive > 0 ? 5 : 2) * dt); f.v.multiplyScalar(1 - dt * 1.3); if (f.v.length() > (f.dive > 0 ? 12 : 8)) f.v.setLength(f.dive > 0 ? 12 : 8);
-        f.g.position.addScaledVector(f.v, dt); f.g.position.y = FLYER_HEIGHT; f.v.y = 0; f.g.rotation.y = Math.atan2(f.v.x, f.v.z); f.g.rotation.z = Math.sin(f.t * 3) * .1;
+        f.g.position.addScaledVector(f.v, dt); f.g.position.y = Collision.heightAt(f.g.position.x, f.g.position.z) + FLYER_HEIGHT; f.v.y = 0; f.g.rotation.y = Math.atan2(f.v.x, f.v.z); f.g.rotation.z = Math.sin(f.t * 3) * .1;
         const fl = Math.sin(f.t * 24) * .9; f.w[0].rotation.z = fl; f.w[1].rotation.z = -fl; f.b.scale.y = 1 + Math.sin(f.t * 24) * .08; f.f = Math.max(0, f.f - dt); f.b.material.emissive.setRGB(f.f * 6, .07 + f.f * 3, .13);
         forEachPlayer(() => { if (!over && f.g.position.distanceTo(tmp.set(P.pos.x, P.pos.y + 1, P.pos.z)) < 1.1) hurt(8, f.g.position) })
       }
       for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.l -= dt; p.v.y -= 18 * dt; p.m.position.addScaledVector(p.v, dt); p.m.scale.setScalar(Math.max(.01, p.l / .6)); if (p.l <= 0) { scene.remove(p.m); parts.splice(i, 1) } }
       updateBurrowDust(dt);
-      updateEnemyDeaths(); advanceBoss(updArmy, dt); advanceBoss(updRobot, dt, rg.position); updEttin(dt); updProj(dt); updateSpecialMissiles(dt); updateEnemyDeaths(); updateDeathPhysics(dt); P = localPlayer; updateInfernoWaves(dt); checkFinalVictory(); updateFinalHUD(); publishSnapshot();
+      updateEnemyDeaths(); advanceBoss(updArmy, dt); advanceBoss(updRobot, dt, rg.position); updEttin(dt); resolveCombatCollisions(); updProj(dt); updateSpecialMissiles(dt); updateEnemyDeaths(); updateDeathPhysics(dt); P = localPlayer; updateInfernoWaves(dt); checkFinalVictory(); updateFinalHUD(); publishSnapshot();
       // câmera em terceira pessoa
       shake = Math.max(0, shake - dt * 1.5); const hd = finalEncounter ? P.pos : R.on ? rg.position : A.on ? P.pos : B.chain[0];
       look.set(P.pos.x * .75 + hd.x * .25, 0, P.pos.z * .75 + hd.z * .25); updateCamera(dt, look.x, look.z, shake);
-      updateTeamUI(); if(typeof updateCombatAudio==='function')updateCombatAudio();
+      updateTeamUI(); if (typeof updateCombatAudio === 'function') updateCombatAudio();
       hb.style.width = Math.max(0, P.hp) + '%'; bb.style.width = (finalEncounter ? updateFinalHUD() : E.on ? E.hp / E.max * 100 : R.on ? R.hp / R.max * 100 : A.on ? (1 - A.killed / A.total) * 100 : B.hp / B.max * 100) + '%';
-      WT.value = performance.now() / 1000; grassSystem.update(dt, players.values()); ren.setRenderTarget(rt); ren.render(scene, cam); ren.setRenderTarget(null); ren.render(pS, pC);
+      updateLightingFocus(P.pos); WT.value = performance.now() / 1000; grassSystem.update(dt, players.values()); ren.setRenderTarget(rt); ren.render(scene, cam); ren.setRenderTarget(null); ren.render(pS, pC);
     }
 
     // ---- menu de bosses
     let started = false, MODE = 0;
     function begin(m) {
       MODE = m; started = true; document.getElementById('menu').style.display = 'none'; updateControls(); try { location.hash = m } catch (e) { }
-      const worldStatus=document.getElementById('world-status');worldStatus.hidden=m!==6;worldStatus.textContent=m===6?'INFERNO · MAPA 20× · MUNDO ATIVO':'';
+      const worldStatus = document.getElementById('world-status'); worldStatus.hidden = m !== 6; worldStatus.textContent = m === 6 ? 'INFERNO · MAPA 20× · MUNDO ATIVO' : '';
       if (typeof resetThirdPersonCamera === 'function') resetThirdPersonCamera(P.face);
       if (m == 2 || m == 3 || m === 5) { B.dead = true; B.dt = 999; B.segs.forEach(o => { o.gone = true; o.root.visible = false }); flyers.forEach(f => scene.remove(f.g)); flyers.length = 0 }
       if (m === 5) startEttin();
-      if (m == 3) { A.on = true; A.wave = 2; startRobot() } if (m === 4) startFinalEncounter(); if (m === 6) { if(typeof startInfernoEncounter==='function')startInfernoEncounter();else banner('REINICIE O SERVIDOR PARA CARREGAR O INFERNO',6000) }
+      if (m == 3) { A.on = true; A.wave = 2; startRobot() } if (m === 4) startFinalEncounter(); if (m === 6) { if (typeof startInfernoEncounter === 'function') startInfernoEncounter(); else banner('REINICIE O SERVIDOR PARA CARREGAR O INFERNO', 6000) }
     }
     const SPR = {
       1: ['s..........s', '.s........s.', '..rrrrrrrr..', '.rrrrrrrrrr.', '.rwwrrrrwwr.', '.rwkrrrrkwr.', '.rrrrrrrrrr.', '..rrkkkkrr..', '..rkwkwkwr..', '...rrrrrr...', '..yy.yy.yy..', '.y..y..y..y.'],
@@ -917,7 +947,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
     };
     SPR[4] = SPR[0];
     SPR[5] = ['..yy..yy....', '.yyyyyyyy...', '.ykkyykky...', '..yyyyyy....', '...yyyy.....', '.yyyyyyyyy..', 'yyyyyyyyyyy.', 'yy.yyyy..yy.', '...yyyy.....', '...y..y.....', '..yy..yy....', '..yy..yy....'];
-    SPR[6] = ['rrrrrrrrrrrr','rkkrrrrrrkkr','rkrrrrrrrrkr','rrrryyyyrrrr','rrrykyykyrrr','rrrryyyyrrrr','rrrkkkkkkrrr','rrrkykkykrrr','rrrrkkkkrrrr','rrryrrrryrrr','rryyrrrryyrr','rrrrrrrrrrrr'];
+    SPR[6] = ['rrrrrrrrrrrr', 'rkkrrrrrrkkr', 'rkrrrrrrrrkr', 'rrrryyyyrrrr', 'rrrykyykyrrr', 'rrrryyyyrrrr', 'rrrkkkkkkrrr', 'rrrkykkykrrr', 'rrrrkkkkrrrr', 'rrryrrrryrrr', 'rryyrrrryyrr', 'rrrrrrrrrrrr'];
     const CL = { r: '#c0392b', w: '#ece6d0', k: '#16121a', s: '#6b5a48', y: '#e8b23a', b: '#4aa8ff' };
     document.querySelectorAll('#menu .ic').forEach(c => { const x = c.getContext('2d'); SPR[c.dataset.m].forEach((row, j) => [...row].forEach((ch, i) => { if (CL[ch]) { x.fillStyle = CL[ch]; x.fillRect(i, j, 1, 1) } })) });
     document.querySelectorAll('#menu .card').forEach(b => b.onclick = () => chooseBoss(+b.dataset.m));
@@ -926,6 +956,7 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
     document.getElementById('pause-open-options').onclick = () => showPausePanel(true);
     document.getElementById('pause-options-back').onclick = () => showPausePanel(false);
     document.getElementById('pause-exit').onclick = () => { try { history.replaceState(null, '', location.pathname + location.search) } catch (error) { } location.reload() };
+    const lightingToggle = document.getElementById('lighting-effects'); lightingToggle.checked = lightingEffects; lightingToggle.onchange = () => setLightingEffects(lightingToggle.checked); setLightingEffects(lightingEffects);
     const pixelSlider = document.getElementById('pixel-strength'); pixelSlider.value = pixelStrength; pixelSlider.oninput = () => setPixelStrength(pixelSlider.value); setPixelStrength(pixelStrength);
     const cameraBlurSlider = document.getElementById('camera-blur'); cameraBlurSlider.value = cameraBlurLevel; cameraBlurSlider.oninput = () => setCameraBlurLevel(cameraBlurSlider.value); setCameraBlurLevel(cameraBlurLevel);
     const grassSlider = document.getElementById('grass-amount'); grassSlider.value = grassAmount; grassSlider.oninput = () => setGrassAmount(grassSlider.value); setGrassAmount(grassAmount);
@@ -933,16 +964,17 @@ float w=${w};transformed.x+=g*w*${a};transformed.z+=g*w*${a}*.5;`)
     // Mode is selected explicitly from the menu; a reload returns to the lobby.
     // Multiplayer initializes before the first frame.
   </script>
+  <script src="collision.js"></script>
   <script src="personagem/fieldfighter-model.js"></script>
   <script src="personagem/arachnodroid-model.js"></script>
   <script src="characters.js"></script>
   <script src="specials.js"></script>
   <script src="personagem/ettin-model.js"></script>
   <script src="ettin.js"></script>
-    <script src="grass-system.js?v=5"></script>
-    <script src="audio-system.js"></script>
-    <script src="inferno-world.js"></script>
-    <script src="final-arena.js"></script>
+  <script src="grass-system.js?v=5"></script>
+  <script src="audio-system.js"></script>
+  <script src="inferno-world.js"></script>
+  <script src="final-arena.js"></script>
   <script src="death-physics.js"></script>
   <script src="multiplayer.js"></script>
   <script>setupNetwork(); loop();</script>

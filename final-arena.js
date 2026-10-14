@@ -41,9 +41,9 @@ function startFinalEncounter(radius=56,staged=false){
 }
 function startInfernoWave(wave){
   infernoWave=wave;infernoWavePending=false;infernoWaveDelay=0;clearSkeletonArmy();const saved=P;P=localPlayer;startArmy();P=saved;
-  if(wave===0)resetCentipede(2,3);
-  else if(wave===1){resetGolem(2,3);P=localPlayer;startRobot();P=saved;R.hp=R.max=3600*bossDifficulty.health;rg.scale.setScalar(3);rg.position.set(24,14,-24)}
-  else if(wave===2){P=localPlayer;startEttin();P=saved;E.hp=E.max=6400*bossDifficulty.health;eg.scale.setScalar(3);eg.position.set(-24,0,12)}
+  if(wave===0){resetCentipede(2,3);const spawn=enemySpawnPoint(76,106),face=Math.atan2(localPlayer.pos.x-spawn.x,localPlayer.pos.z-spawn.z);B.h=face;for(let i=0;i<N;i++){B.chain[i].set(spawn.x-Math.sin(face)*i*SP,0,spawn.z-Math.cos(face)*i*SP);B.disp[i].copy(B.chain[i])}}
+  else if(wave===1){resetGolem(2,3);P=localPlayer;startRobot();P=saved;R.hp=R.max=3600*bossDifficulty.health;rg.scale.setScalar(3);const spawn=enemySpawnPoint(76,106);rg.position.set(spawn.x,spawn.y+14,spawn.z)}
+  else if(wave===2){P=localPlayer;startEttin();P=saved;E.hp=E.max=6400*bossDifficulty.health;eg.scale.setScalar(3);const spawn=enemySpawnPoint(76,106);eg.position.copy(spawn)}
   banner(`🔥 ONDA ${wave+1}/3 · ${INFERNO_WAVE_NAMES[wave]} + ESQUELETOS`,4200);updateFinalHUD();
 }
 function startInfernoEncounter(){setInfernoWorld(true);startInfernoMusic();startFinalEncounter(INFERNO_RADIUS,true);startInfernoWave(0)}
@@ -55,8 +55,7 @@ function infernoBossDefeated(){
 }
 function updateInfernoWaves(dt){
   if(!infernoMode||over||infernoWave<0)return;
-  const skeletonsDefeated=A.wave===2&&A.u.every(unit=>unit.dead);
-  if(!infernoWavePending&&skeletonsDefeated&&infernoBossDefeated()){infernoWavePending=true;infernoWaveDelay=2.2;banner(infernoWave<2?'ONDA CONCLUÍDA · PRÓXIMO TITÃ':'INFERNO CONCLUÍDO',2100)}
+  if(!infernoWavePending&&infernoBossDefeated()){infernoWavePending=true;infernoWaveDelay=2.2;banner(infernoWave<2?'BOSS DERROTADO · PRÓXIMA ONDA':'INFERNO CONCLUÍDO',2100)}
   if(!infernoWavePending)return;
   infernoWaveDelay-=dt;if(infernoWaveDelay>0)return;
   if(infernoWave===2)finish(true);else startInfernoWave(infernoWave+1);

@@ -9,6 +9,7 @@ let cameraMode='third';
 let pointerInside=true;
 let netSocket=null,netRoom=null,myId=null,isHost=false,matchWon=false;
 let bossDifficulty={health:1,speed:1,attacks:1};
+let respawnRules={infinite:false,lives:1,delay:3};
 let pendingDash=false,pendingSpecial=false;
 let pendingParry=false,lastInput=0,lastSnapshot=0,networkMode='solo',lastState=null,guestOnly=false,menuScreen='main';
 const SNAPSHOT_INTERVAL=50,INTERPOLATION_DELAY=100;
@@ -41,10 +42,11 @@ function resetThirdPersonCamera(face=Math.PI){thirdPersonCamera.yaw=face;thirdPe
 function rotateThirdPersonCamera(dx,dy){if(!started||paused||over||cameraMode!=='third')return;const length=Math.hypot(dx,dy);if(!length)return;thirdPersonCamera.yaw-=dx*.0026;thirdPersonCamera.pitch=Math.max(-1.15,Math.min(1.15,thirdPersonCamera.pitch-dy*.002));thirdPersonCamera.turnImpulse=Math.min(120,thirdPersonCamera.turnImpulse+length);thirdPersonCamera.blurDirection.set(-dx/length*.0065,dy/length*.0065)}
 function zoomThirdPersonCamera(delta){thirdPersonCamera.targetDistance=Math.max(thirdPersonCamera.minDistance,Math.min(thirdPersonCamera.maxDistance,thirdPersonCamera.targetDistance+delta*.012))}
 function cameraRelativeInput(x,z,yaw=thirdPersonCamera.yaw){const forward=-z,s=Math.sin(Number.isFinite(yaw)?yaw:thirdPersonCamera.yaw),c=Math.cos(Number.isFinite(yaw)?yaw:thirdPersonCamera.yaw);return {x:-c*x+s*forward,z:s*x+c*forward}}
+function resolveCameraPosition(desired,player=localPlayer){const anchor=new T.Vector3(player.pos.x,player.pos.y+2.1,player.pos.z);return Collision.cameraSweep(anchor,desired,.42,arenaRadius)}
 function updateCamera(dt,x,z,shakeAmount=0){
   const state=thirdPersonCamera,player=localPlayer,s=Math.sin(state.yaw),c=Math.cos(state.yaw),rightX=-c,rightZ=s;
   if(cameraMode==='isometric'){
-    tmp.set(player.pos.x,player.pos.y+30,player.pos.z+36);camT.lerp(tmp,1-Math.exp(-dt*8));state.look.lerp(tmp.set(player.pos.x,player.pos.y+1.1,player.pos.z),1-Math.exp(-dt*10));
+    tmp.set(player.pos.x,player.pos.y+30,player.pos.z+36);camT.lerp(tmp,1-Math.exp(-dt*8));camT.copy(resolveCameraPosition(camT,player));state.look.lerp(tmp.set(player.pos.x,player.pos.y+1.1,player.pos.z),1-Math.exp(-dt*10));
     cam.position.set(camT.x+rnd(-1,1)*shakeAmount,camT.y+rnd(-1,1)*shakeAmount,camT.z+rnd(-1,1)*shakeAmount);cam.lookAt(state.look);state.roll+=(0-state.roll)*(1-Math.exp(-dt*8));
     state.fov+=(50-state.fov)*(1-Math.exp(-dt*6));cam.fov=state.fov;cam.updateProjectionMatrix();PU.b.value*=Math.exp(-dt*12);updateAimCursor();return;
   }
@@ -52,7 +54,7 @@ function updateCamera(dt,x,z,shakeAmount=0){
   const speed=Math.hypot(player.vx||0,player.vz||0),motion=Math.min(1,speed/9);
   const bob=Math.sin((player.ph||0)*2)*.1*motion,sideBob=Math.cos((player.ph||0))* .07*motion,lateral=(player.vx*rightX+player.vz*rightZ)/9;
   tmp.set(player.pos.x-s*state.distance+rightX*(.65+sideBob),player.pos.y+3.65+state.distance*.12+bob,player.pos.z-c*state.distance+rightZ*(.65+sideBob));
-  camT.lerp(tmp,1-Math.exp(-dt*10));
+  camT.lerp(tmp,1-Math.exp(-dt*10));camT.copy(resolveCameraPosition(camT,player));
   const cp=Math.cos(state.pitch),lookDistance=60;
   state.look.set(camT.x+s*cp*lookDistance,camT.y+Math.sin(state.pitch)*lookDistance,camT.z+c*cp*lookDistance);
   cam.position.set(camT.x+rnd(-1,1)*shakeAmount,camT.y+rnd(-1,1)*shakeAmount,camT.z+rnd(-1,1)*shakeAmount);cam.lookAt(state.look);
@@ -86,7 +88,20 @@ function selectTarget(point,enemy,dt=0){
   }
   P=alive.find(p=>p.id===state.id)||alive[0];return P;
 }
-function playerDied(){P.hp=0;shatterPlayer(P);if([...players.values()].every(p=>p.hp<=0))finish(false)}
+function canRespawn(player){return networkMode==='group'&&!!netRoom&&(respawnRules.infinite||player.livesRemaining>0)}
+function teamDefeated(){return [...players.values()].every(player=>player.hp<=0&&!canRespawn(player))}
+function playerDied(){
+  if(P.respawnAt)return;P.hp=0;P.livesRemaining=respawnRules.infinite?Infinity:Math.max(0,(P.livesRemaining??1)-1);shatterPlayer(P);
+  if(canRespawn(P))P.respawnAt=performance.now()+respawnRules.delay*1000;else if(teamDefeated())finish(false)
+}
+function revivePlayer(player){
+  const team=[...players.values()],index=Math.max(0,team.indexOf(player)),anchor=team.find(other=>other!==player&&other.hp>0)?.pos;
+  const x=(anchor?.x??0)+(index%4-1.5)*2.2,z=(anchor?.z??20)+Math.floor(index/4)*2.2;player.pos.set(x,Collision.heightAt(x,z),z);Collision.resolve(player.pos,.65,arenaRadius,{ground:true});
+  player.hp=100;player.inv=2.2;player.respawnAt=0;player.deathExploded=false;player.vx=player.vz=player.vy=player.kx=player.kz=0;player.ground=true;player.fire=0;player.combo=null;player.strike=0;player.specialState=null;player.minigunFiring=false;player.dashActive=false;player.boosting=false;player.laserTime=0;
+  resetShatter(player.g);player.g.visible=true;player.g.position.copy(player.pos);if(player.laserBeam)player.laserBeam.visible=false;if(player.specialEffect)player.specialEffect.visible=false;burst(player.pos.x,player.pos.y+1,player.pos.z,0x88ddff,20,7)
+}
+function updateRespawns(){if(networkMode!=='group'||!netRoom)return;const now=performance.now();for(const player of players.values())if(player.hp<=0&&player.respawnAt&&now>=player.respawnAt)revivePlayer(player)}
+function initializePlayerLives(player){player.livesRemaining=respawnRules.infinite?Infinity:respawnRules.lives;player.respawnAt=0}
 function healTeam(){forEachPlayer(()=>P.hp=Math.min(100,P.hp+50))}
 function bossMovementTime(dt){return dt*bossDifficulty.speed/bossDifficulty.attacks}
 function advanceBoss(update,dt,point){
@@ -95,6 +110,7 @@ function advanceBoss(update,dt,point){
   for(let i=0;i<steps;i++){if(point)selectTarget(point,update===updBoss?B:R,dt/steps);update(total/steps)}
 }
 function simulatePlayers(dt){
+  updateRespawns();
   const savedAim=aim.clone(),savedY=aimY;
   for(const p of players.values()){
     P=p;
@@ -108,17 +124,17 @@ function simulatePlayers(dt){
   P=localPlayer;aim.copy(savedAim);aimY=savedY;
 }
 function createPlayer(info,index){
-  if(info.id===myId){localPlayer.id=info.id;localPlayer.name=info.name;localPlayer.pos.set((index%4-1.5)*4,0,20+Math.floor(index/4)*4);configureCharacter(localPlayer,info.character,index);players.set(info.id,localPlayer);return}
+  if(info.id===myId){localPlayer.id=info.id;localPlayer.name=info.name;localPlayer.pos.set((index%4-1.5)*4,0,20+Math.floor(index/4)*4);configureCharacter(localPlayer,info.character,index);initializePlayerLives(localPlayer);players.set(info.id,localPlayer);return}
   const p={...localPlayer,g:new T.Group(),pos:new T.Vector3((index%4-1.5)*4,0,20+Math.floor(index/4)*4),hp:100,
     id:info.id,name:info.name,lastAim:[0,1,0],ring:ring.clone(),meleeRing:null,laserBeam:null,specialEffect:null,combo:null};
   p.ring.traverse(o=>{if(o.material)o.material=o.material.clone()});
-  configureCharacter(p,info.character,index);scene.add(p.ring);players.set(info.id,p);
+  configureCharacter(p,info.character,index);initializePlayerLives(p);scene.add(p.ring);players.set(info.id,p);
 }
 function chooseBoss(mode){
   if(started)return;
   if(networkMode==='solo'){
-    const scale=Number($('single-difficulty')?.value||1);bossDifficulty={health:scale,speed:scale,attacks:scale};
-    localPlayer.name=robotName();localPlayer.id='solo';configureCharacter(localPlayer,selectedCharacter());players.set('solo',localPlayer);begin(mode);return;
+    const scale=Number($('single-difficulty')?.value||1);bossDifficulty={health:scale,speed:scale,attacks:scale};respawnRules={infinite:false,lives:1,delay:3};
+    localPlayer.name=robotName();localPlayer.id='solo';configureCharacter(localPlayer,selectedCharacter());initializePlayerLives(localPlayer);players.set('solo',localPlayer);begin(mode);return;
   }
   if(!netRoom){status('Crie uma sala ou entre em uma das salas da lista.');return}
   if(!isHost){status('Aguarde o criador escolher o boss e iniciar a partida.');return}
@@ -154,6 +170,11 @@ function setupNetwork(){
           </div>
           <label class="difficulty-check"><input id="difficulty-per-player" type="checkbox" checked>Multiplicar também pelo número de jogadores</label>
           <small>1× equivale ao boss original. Valores entre 0,25 e 10. Com a opção marcada, 2× e dois jogadores resultam em 4×.</small>
+          <div id="respawn-settings"><strong>Vidas dos jogadores</strong>
+            <label class="lives-field">Vidas por jogador<input id="player-lives" type="number" min="1" max="99" step="1" value="3" required></label>
+            <label class="difficulty-check"><input id="infinite-respawn" type="checkbox">Ressurgimento infinito</label>
+            <small>O valor inclui a vida inicial. O ressurgimento acontece depois de 3 segundos.</small>
+          </div>
         </fieldset>
         <div class="lan-row"><button class="lan-btn" id="create-room">Criar sala</button><button class="lan-btn" id="refresh-rooms">Atualizar salas</button></div><div id="rooms"></div><p>Todos devem abrir o endereço do mesmo servidor na rede local.</p></div>
       <div id="room-info" hidden><strong id="room-title"></strong><ul id="room-players"></ul><div id="difficulty"></div><div id="waiting-tip"></div><button class="lan-btn" id="leave-room">Sair da sala</button></div>
@@ -180,6 +201,7 @@ function setupNetwork(){
     localStorage.setItem('arena-character',selectedCharacter());
     if(netRoom&&!started)netSend({type:'character',character:selectedCharacter()});
   });
+  $('infinite-respawn').onchange=()=>{$('player-lives').disabled=$('infinite-respawn').checked};
   const dash=document.createElement('div');dash.id='dash-status';dash.innerHTML='<span id="boost-label">Combustível</span><span class="boost-track"><i id="boost-fill"></i></span>';document.body.append(dash);
   const special=document.createElement('div');special.id='special-status';document.body.append(special);
   const cameraStatus=document.createElement('div');cameraStatus.id='camera-status';cameraStatus.textContent='Câmera: 3ª pessoa';cameraStatus.hidden=true;document.body.append(cameraStatus);
@@ -209,7 +231,9 @@ function setupNetwork(){
     for(const key of fields)if(!$('difficulty-'+key).reportValidity())return;
     const difficulty=Object.fromEntries(fields.map(key=>[key,$('difficulty-'+key).valueAsNumber]));
     difficulty.perPlayer=$('difficulty-per-player').checked;
-    netSend({type:'create',name:robotName(),character:selectedCharacter(),roomName:$('room-name').value,mode:Number($('room-mode').value),difficulty});
+    if(!$('player-lives').reportValidity())return;
+    const respawn={infinite:$('infinite-respawn').checked,lives:$('player-lives').valueAsNumber};
+    netSend({type:'create',name:robotName(),character:selectedCharacter(),roomName:$('room-name').value,mode:Number($('room-mode').value),difficulty,respawn});
   };
   $('refresh-rooms').onclick=()=>{connectNetwork();netSend({type:'list'})};
   $('leave-room').onclick=()=>netSend({type:'leave'});
@@ -234,7 +258,7 @@ function connectNetwork(){
     if(msg.type==='closed'){netRoom=null;isHost=false;if(started){over=true;showNetworkEnd(msg.reason)}else renderRoom();status(msg.reason)}
     if(msg.type==='start')startNetworkMatch(msg);
     if(msg.type==='input'&&isHost){const old=remoteInputs.get(msg.id);msg.input.parry=msg.input.parry||old?.parry;msg.input.dash=msg.input.dash||old?.dash;msg.input.special=msg.input.special||old?.special;msg.input.received=performance.now();remoteInputs.set(msg.id,msg.input)}
-    if(msg.type==='departed'&&isHost){const p=players.get(msg.id);if(p){scene.remove(p.g,p.ring,p.specialEffect);if(p.meleeRing)scene.remove(p.meleeRing);if(p.meleeShock)scene.remove(p.meleeShock);if(p.laserBeam)scene.remove(p.laserBeam);players.delete(msg.id);remoteInputs.delete(msg.id);if([...players.values()].every(p=>p.hp<=0))finish(false)}}
+    if(msg.type==='departed'&&isHost){const p=players.get(msg.id);if(p){scene.remove(p.g,p.ring,p.specialEffect);if(p.meleeRing)scene.remove(p.meleeRing);if(p.meleeShock)scene.remove(p.meleeShock);if(p.laserBeam)scene.remove(p.laserBeam);players.delete(msg.id);remoteInputs.delete(msg.id);if(teamDefeated())finish(false)}}
     if(msg.type==='snapshot'&&!isHost)receiveSnapshot(msg);
   };
 }
@@ -258,12 +282,13 @@ function renderRoom(){
   const number=value=>value.toLocaleString('pt-BR',{maximumFractionDigits:2});
   const d=netRoom.difficulty;
   $('difficulty').textContent=`Boss: vida ${number(d.health*factor)}× · velocidade ${number(d.speed*factor)}× · ataques ${number(d.attacks*factor)}×. ${d.perPlayer?'Valores multiplicados por '+netRoom.players.length+' jogador(es).':'Valores fixos, independentemente do número de jogadores.'}`;
+  $('difficulty').textContent+=` Jogadores: ${netRoom.respawn?.infinite?'ressurgimento infinito':(netRoom.respawn?.lives??3)+' vida(s) por jogador'}.`;
   $('waiting-tip').textContent=isHost?'Quando todos entrarem, clique em Iniciar partida.':'Aguarde o criador iniciar a partida.';
   $('start-room').hidden=!isHost;
   status('Sala pronta. Compartilhe o endereço do jogo com seus amigos.');
 }
 function startNetworkMatch(msg){
-  netRoom=msg.room;isHost=netRoom.host===myId;bossDifficulty={...msg.multipliers};players.clear();
+  netRoom=msg.room;isHost=netRoom.host===myId;bossDifficulty={...msg.multipliers};respawnRules={infinite:!!netRoom.respawn?.infinite,lives:netRoom.respawn?.lives??3,delay:3};players.clear();
   snapshotSequence=0;lastReceivedSnapshot=-1;networkClockOffset=null;networkRenderTime=0;guestPlayerSamples.clear();
   clearInput();
   if(isHost){
@@ -312,7 +337,7 @@ function publishSnapshot(){
       nodeIndex++;
     });sentTransforms.set(root.object.uuid,previous);if(nodes.length)transforms.push([root.object.uuid,nodes]);
   }
-  netSend({type:'snapshot',sequence:++snapshotSequence,sentAt:lastSnapshot,added,removed,transforms,players:[...players.values()].map(p=>({id:p.id,name:p.name,character:p.character,hp:Math.max(0,p.hp),dashCooldown:p.dashCooldown||0,dashFuel:p.dashFuel??100,boosting:!!p.boosting,minigunFiring:!!p.minigunFiring,specialCooldown:p.specialCooldown||0,pos:p.pos.toArray()})),
+  netSend({type:'snapshot',sequence:++snapshotSequence,sentAt:lastSnapshot,added,removed,transforms,players:[...players.values()].map(p=>({id:p.id,name:p.name,character:p.character,hp:Math.max(0,p.hp),livesRemaining:Number.isFinite(p.livesRemaining)?p.livesRemaining:null,infiniteLives:respawnRules.infinite,respawnIn:p.respawnAt?Math.max(0,(p.respawnAt-performance.now())/1000):0,dashCooldown:p.dashCooldown||0,dashFuel:p.dashFuel??100,boosting:!!p.boosting,minigunFiring:!!p.minigunFiring,specialCooldown:p.specialCooldown||0,pos:p.pos.toArray()})),
     ettin:{active:E.on&&!E.dead,rage:E.rage,enraged:E.enraged},golemSpawnSerial,golemMinigun:R.on&&!R.dead&&R.state==='mg'&&R.st>.8&&R.st<3.6,arenaRadius,finalEncounter,infernoMode,infernoWave,infernoWorldRevision,infernoDestroyed:infernoMode?[...infernoDestroyed]:[],boss:{title:$('bt').textContent,color:$('bb').style.background,percent:finalEncounter?updateFinalHUD():E.on?E.hp/E.max*100:R.on?R.hp/R.max*100:A.on?(1-A.killed/A.total)*100:B.hp/B.max*100},over,won:matchWon});
 }
 // Resources stay cached for the match: future bullets can reuse them after removal.
@@ -382,7 +407,7 @@ function receiveSnapshot(msg){
   for(const [id,changes]of msg.transforms){const root=replicas.get(id);if(!root)continue;
     for(const [i,v]of changes)if(root.nodes[i])queueNetworkSample(root,i,v,sentAt);
   }
-  queuePlayerSamples(msg.players,sentAt);lastState=msg;syncGolemSpawnSound(msg.golemSpawnSerial);const mine=msg.players.find(p=>p.id===myId);if(mine){localPlayer.hp=mine.hp;localPlayer.boosting=mine.boosting}
+  queuePlayerSamples(msg.players,sentAt);lastState=msg;syncGolemSpawnSound(msg.golemSpawnSerial);const mine=msg.players.find(p=>p.id===myId);if(mine){localPlayer.hp=mine.hp;localPlayer.livesRemaining=mine.livesRemaining;localPlayer.respawnIn=mine.respawnIn;localPlayer.boosting=mine.boosting}
   $('bt').textContent=msg.boss.title;$('bb').style.background=msg.boss.color;$('bb').style.width=msg.boss.percent+'%';$('hb').style.width=Math.max(0,localPlayer.hp)+'%';
   if(msg.over&&!over){over=true;showNetworkEnd(msg.won?'🏆 A equipe venceu!':'💀 Equipe derrotada')}
 }
@@ -396,13 +421,13 @@ function guestFrame(dt){
     root.readyAt=null;
   }
   const renderedPlayers=renderedNetworkPlayers(),mine=renderedPlayers.find(player=>player.id===myId);
-  if(mine){localPlayer.hp=mine.hp;localPlayer.dashCooldown=mine.dashCooldown;localPlayer.dashFuel=mine.dashFuel;localPlayer.boosting=mine.boosting;localPlayer.specialCooldown=mine.specialCooldown;localPlayer.pos.fromArray(mine.pos)}
+  if(mine){localPlayer.hp=mine.hp;localPlayer.livesRemaining=mine.livesRemaining;localPlayer.respawnIn=mine.respawnIn;localPlayer.dashCooldown=mine.dashCooldown;localPlayer.dashFuel=mine.dashFuel;localPlayer.boosting=mine.boosting;localPlayer.specialCooldown=mine.specialCooldown;localPlayer.pos.fromArray(mine.pos)}
   ray.setFromCamera(cameraAimPoint(),cam);const targets=[...replicas.values()].filter(r=>r.kind==='enemy').map(r=>r.object).filter(o=>o.visible);
   const hit=ray.intersectObjects(targets,true).find(h=>h.object.material?.opacity!==.5);
   if(hit)aim.copy(hit.point);else if(cameraMode==='isometric'&&ray.ray.intersectPlane(plane,tmp))aim.copy(tmp);else aim.copy(ray.ray.direction).multiplyScalar(70).add(ray.ray.origin);aimY=aim.y;
   if(netRoom&&!over&&performance.now()-lastInput>=33){lastInput=performance.now();netSend({type:'input',input:localInput()})}
   updateCamera(dt,localPlayer.pos.x,localPlayer.pos.z);
-  updateTeamUI();updateCombatAudio();WT.value=performance.now()/1000;grassSystem.update(dt,renderedPlayers);ren.setRenderTarget(rt);ren.render(scene,cam);ren.setRenderTarget(null);ren.render(pS,pC);
+  updateTeamUI();updateCombatAudio();updateLightingFocus(localPlayer.pos);WT.value=performance.now()/1000;grassSystem.update(dt,renderedPlayers);ren.setRenderTarget(rt);ren.render(scene,cam);ren.setRenderTarget(null);ren.render(pS,pC);
 }
 let lastTeamUI=0;
 function updateTeamUI(){
@@ -410,7 +435,7 @@ function updateTeamUI(){
   $('special-status').hidden=!started||over;const info=SPECIALS[localPlayer.character];$('special-status').textContent=localPlayer.hp<=0?'Especial indisponível':info.name+' · '+(localPlayer.specialCooldown>0?localPlayer.specialCooldown.toFixed(1)+'s':'Pronto · F');
   $('dash-status').hidden=!started||over;const fuel=Math.max(0,localPlayer.dashFuel??100);$('boost-label').textContent=localPlayer.hp<=0?'Boost indisponível':(localPlayer.boosting?'BOOST · '+Math.ceil(fuel)+'%':'Combustível · '+Math.ceil(fuel)+'%');$('boost-fill').style.width=fuel+'%';$('boost-fill').classList.toggle('active',!!localPlayer.boosting);
   const team=isHost||!netRoom?[...players.values()]:renderedNetworkPlayers();
-  if(performance.now()-lastTeamUI>150){lastTeamUI=performance.now();$('team').replaceChildren();for(const p of team){const row=document.createElement('div');row.textContent=`${p.name}${p.id===localPlayer.id?' (você)':''} · ${characterInfo(p.character).name} · ${Math.max(0,Math.ceil(p.hp))}/100${p.hp<=0?' · abatido':''}`;$('team').append(row)}}
+  if(performance.now()-lastTeamUI>150){lastTeamUI=performance.now();$('team').replaceChildren();for(const p of team){const row=document.createElement('div'),infinite=p.infiniteLives??respawnRules.infinite,lives=infinite?'∞ vidas':`${Math.max(0,p.livesRemaining??respawnRules.lives)} vida(s)`,respawnIn=p.respawnIn??(p.respawnAt?Math.max(0,(p.respawnAt-performance.now())/1000):0),state=p.hp<=0?(respawnIn>0?` · ressurge em ${Math.ceil(respawnIn)}s`:' · abatido'):'';row.textContent=`${p.name}${p.id===localPlayer.id?' (você)':''} · ${characterInfo(p.character).name} · ${Math.max(0,Math.ceil(p.hp))}/100 · ${lives}${state}`;$('team').append(row)}}
   const labelContainer=$('player-labels');
   const liveIds=new Set();
   for(const p of team){
