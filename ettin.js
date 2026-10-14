@@ -38,7 +38,7 @@ function ettinPose(clip,progress){
   for(const [name,joint]of Object.entries(ettinJoints)){const from=(a.t===0?E.poseStart?.[name]:null)||a.p[name]||[0,0,0],to=b.p[name]||[0,0,0];joint.pivot.rotation.set(...from.map((v,k)=>v+(to[k]-v)*blend))}
 }
 function ettinCapturePose(){return Object.fromEntries(Object.entries(ettinJoints).map(([name,joint])=>[name,joint.pivot.rotation.toArray().slice(0,3)]))}
-function ettinImpactFX(radius){E.shockLife=.38;E.shockRadius=radius;ettinShock.position.copy(eg.position);ettinShock.position.y=.12;burst(eg.position.x,.3,eg.position.z,0xffb83e,24,10);grassSystem.addImpact(eg.position,radius,1.35)}
+function ettinImpactFX(radius){E.shockLife=.38;E.shockRadius=radius;ettinShock.position.copy(eg.position);ettinShock.position.y=.12;burst(eg.position.x,.3,eg.position.z,0xffb83e,24,10);grassSystem.addImpact(eg.position,radius,1.35);infernoBossImpact(eg.position,radius+2)}
 function ettinUpdateEffects(dt){
   for(const trail of ettinTrails){trail.life=Math.max(0,trail.life-dt);trail.mesh.visible=trail.life>0;trail.mesh.material.opacity=trail.life/.16*.6}
   const swinging=E.state==='swing'||E.state==='combo',active=swinging&&E.time<.3;

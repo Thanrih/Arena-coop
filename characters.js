@@ -1,8 +1,31 @@
 const CHARACTERS = {
   ranger: { name: 'Artilheiro', description: 'Tiros rápidos à distância', interval: .13 },
-  fieldfighter: { name: 'Fieldfighter', description: 'Combo de 2 golpes massivos em cone', interval: .85, radius: 4.8 },
+  fieldfighter: { name: 'Fieldfighter', description: 'Combo de 3 golpes massivos em cone', interval: 1.45, radius: 4.8 },
   arachnodroid: { name: 'Arachondroid', description: 'Laser contínuo · mais lento ao disparar', interval: .22 }
 };
+const GLIDE_DURATION = 1.2, GLIDE_GRAVITY = 6, GLIDE_FALL_CAP = 2.2, GLIDE_SPEED = 11;
+// ---- Combo de 3 hits do Fieldfighter (referência: antecipação → contato → finalização)
+// at: instante do impacto · aim: quando a direção é reavaliada · damage: multiplicador do dano base
+// fx: duração do rastro · y/tilt/roll/sweep: posição e giro do rastro luminoso
+const FIELD_COMBO = [
+  { at: .16, aim: 0, damage: .75, radius: 3.8, half: Math.PI * .25, shake: .45, lunge: .5, push: .5, inv: .15, fx: .2, y: 1.3, tilt: [0, 0], roll: 0, sweep: [-.9, .9], color: 0xffb83e },
+  { at: .5, aim: .3, damage: 1, radius: 4.8, half: Math.PI * .4, shake: .8, lunge: .7, push: .8, inv: .15, fx: .24, y: 1.4, tilt: [0, 0], roll: .55, sweep: [.9, -.9], color: 0xffd27a },
+  { at: 1, aim: .64, damage: 1.5, radius: 5.6, half: Math.PI * .33, shake: 1.5, lunge: 1.1, push: 2, inv: .3, fx: .4, y: 1.6, tilt: [-1, .35], roll: Math.PI / 2, sweep: [0, 0], color: 0xfff0c0 }
+];
+const FIELD_COMBO_END = 1.4;
+// Poses: [braçoL x, braçoL z, braçoR x, braçoR z, giro Y, inclinação X, inclinação Z, altura, perna L, perna R]
+const FC_N = [-.25, -.15, -.25, .15, 0, 0, 0, 0, 0, 0];
+const FC_A1 = [.6, -1.1, -.9, .35, -.6, .06, 0, 0, .35, -.3], FC_C1 = [-1.55, -.25, -.7, .3, .6, .18, -.05, 0, -.3, .3], FC_F1 = [-1.1, -.3, -.6, .3, .35, .1, 0, 0, -.15, .15];
+const FC_A2 = [-.7, -.3, .55, 1.15, .65, .08, 0, 0, -.3, .35], FC_C2 = [-.6, -.3, -1.55, .25, -.65, .2, .05, 0, .3, -.3], FC_F2 = [-.5, -.3, -1.1, .3, -.4, .1, 0, 0, .15, -.15];
+const FC_A3 = [-3, -.35, -3, .35, 0, -.3, 0, .3, -.35, .3], FC_C3 = [-.35, -.25, -.35, .25, 0, .6, 0, -.1, -.55, .5], FC_C3B = [-.2, -.2, -.2, .2, 0, .5, 0, -.1, -.5, .5];
+// [tempo, pose, easeIn]: easeIn acelera até o contato; as demais transições são suaves.
+const FIELD_COMBO_KEYS = [[0, FC_A1], [.16, FC_C1, 1], [.28, FC_F1], [.34, FC_A2], [.5, FC_C2, 1], [.64, FC_F2], [.9, FC_A3], [1, FC_C3, 1], [1.14, FC_C3B], [FIELD_COMBO_END, FC_N]];
+function comboPose(t) {
+  const k = FIELD_COMBO_KEYS; if (t >= k[k.length - 1][0]) return k[k.length - 1][1];
+  let i = 1; while (t > k[i][0]) i++;
+  const a = k[i - 1], b = k[i], u = Math.min(1, Math.max(0, (t - a[0]) / (b[0] - a[0]))), e = b[2] ? u * u : u * u * (3 - 2 * u);
+  return a[1].map((v, j) => v + (b[1][j] - v) * e);
+}
 const originalPlayerModel = P.g.clone(true);
 const boostParticleGeometry = new T.BoxGeometry(.12, .12, .28);
 const boostParticleMaterials = [
@@ -113,9 +136,9 @@ function configureCharacter(player, id, index = 0) {
     g.traverse(o => { if (o.material) { o.material = o.material.clone(); o.material.color.setHex(colors[index % colors.length]) } });
     model = { g, rigRefs: { rig, lL: mech.children[1], lR: mech.children[2], aL: mech.children[3], aR: mech.children[4] } };
   }
-  scene.remove(player.g); if (player.meleeRing) scene.remove(player.meleeRing); if (player.laserBeam) scene.remove(player.laserBeam);
-  player.g = model.g; player.rigRefs = model.rigRefs; player.character = character; player.strike = 0; player.fire = 0;
-  player.combo = null; player.dashCooldown = 0; player.dashTime = 0; player.dashFuel = 50; player.dashFuelDelay = 0; player.dashActive = false; player.boosting = false; player.boostPose = 0; player.laserTime = 0;
+  scene.remove(player.g); if (player.meleeRing) scene.remove(player.meleeRing); if (player.meleeShock) scene.remove(player.meleeShock); if (player.laserBeam) scene.remove(player.laserBeam);
+  player.g = model.g; player.rigRefs = model.rigRefs; player.character = character; player.strike = 0; player.strikeHit = 0; player.fire = 0;
+  player.combo = null; player.dashCooldown = 0; player.dashTime = 0; player.glideTime = 0; player.dashFuel = 50; player.dashFuelDelay = 0; player.dashActive = false; player.boosting = false; player.boostPose = 0; player.laserTime = 0;
   player.deathExploded = false;
   setupSpecial(player);
   player.boostEffect = createBoostEffect(character); player.g.add(player.boostEffect);
@@ -126,10 +149,15 @@ function configureCharacter(player, id, index = 0) {
     player.laserBeam.visible = false; scene.add(player.laserBeam);
   }
   if (typeof $ === 'function' && player === localPlayer) updateControls();
-  player.meleeRing = null;
+  player.meleeRing = null; player.meleeShock = null;
   if (character === 'fieldfighter') {
-    player.meleeRing = new T.Mesh(new T.TorusGeometry(1, .09, 4, 32, Math.PI * .6).rotateZ(Math.PI * .2).rotateX(Math.PI / 2), new T.MeshBasicMaterial({ color: 0xffc34a, transparent: true, opacity: .9, blending: T.AdditiveBlending, depthWrite: false }));
-    player.meleeRing.visible = false; scene.add(player.meleeRing);
+    // Crescente de golpe: setor achatado centrado à frente; giro/inclinação/roll mudam a cada hit.
+    player.meleeRing = new T.Mesh(new T.RingGeometry(.55, 1, 32, 1, Math.PI / 2 - 1.2, 2.4).rotateX(Math.PI / 2), new T.MeshBasicMaterial({ color: 0xffc34a, transparent: true, opacity: .9, side: T.DoubleSide, blending: T.AdditiveBlending, depthWrite: false }));
+    player.meleeRing.rotation.order = 'YXZ'; player.meleeRing.name = 'Fieldfighter slash trail'; player.meleeRing.visible = false; scene.add(player.meleeRing);
+    // Onda de choque do golpe final.
+    player.meleeShock = new T.Mesh(new T.RingGeometry(.86, 1, 48).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: .85, side: T.DoubleSide, blending: T.AdditiveBlending, depthWrite: false }));
+    player.meleeShock.name = 'Fieldfighter shockwave'; player.meleeShock.visible = false; scene.add(player.meleeShock);
+    player.shockCenter = new T.Vector3();
   }
 }
 function performAttack() {
@@ -138,28 +166,76 @@ function performAttack() {
   if (P.combo) return;
   const dx = aim.x - P.pos.x, dz = aim.z - P.pos.z;
   if (Math.hypot(dx, dz) > .01) P.face = Math.atan2(dx, dz);
-  P.combo = { elapsed: 0, second: false, face: P.face };
-  meleeImpact();
+  // O impacto de cada hit ocorre em animateCharacter, no instante FIELD_COMBO[i].at.
+  P.combo = { elapsed: 0, hit: 0, aimed: 0, face: P.face };
 }
-function meleeImpact() {
-  const radius = CHARACTERS.fieldfighter.radius;
-  const face = P.combo.face;
+function meleeImpact(index = 1) {
+  const hit = FIELD_COMBO[index], radius = hit.radius, face = P.combo.face, cosHalf = Math.cos(hit.half), m = hit.damage;
   const inRange = (position, padding = 0, height = position.y) => {
     const dx = position.x - P.pos.x, dz = position.z - P.pos.z, d = Math.hypot(dx, dz);
-    return d <= radius + padding && Math.abs(height - P.pos.y) < 3.6 && (d < .05 || (dx * Math.sin(face) + dz * Math.cos(face)) / d >= Math.cos(Math.PI * .3));
+    return d <= radius + padding && Math.abs(height - P.pos.y) < 3.6 && (d < .05 || (dx * Math.sin(face) + dz * Math.cos(face)) / d >= cosHalf);
   };
-  P.strike = .25; P.inv = Math.max(P.inv, .12); shake = Math.max(shake, .7);
-  burst(P.pos.x + Math.sin(face) * 2, P.pos.y + .3, P.pos.z + Math.cos(face) * 2, 0xffb83e, 20, 8);
-  grassSystem.addImpact(new T.Vector3(P.pos.x + Math.sin(face) * 2, 0, P.pos.z + Math.cos(face) * 2), radius, 1.1);
+  P.strike = hit.fx; P.strikeHit = index; P.inv = Math.max(P.inv, hit.inv); shake = Math.max(shake, hit.shake);
+  const reach = index === 2 ? 3.2 : 2, cx = P.pos.x + Math.sin(face) * reach, cz = P.pos.z + Math.cos(face) * reach;
+  burst(cx, P.pos.y + .4, cz, 0xffb83e, index === 2 ? 26 : index ? 18 : 12, index === 2 ? 10 : 8);
+  if (index === 1) burst(cx, P.pos.y + .6, cz, 0xffffff, 8, 7);
+  if (index === 2) {
+    // Esmagamento: onda de choque, poeira e destroços no ponto de impacto.
+    P.shockCenter.set(cx, 0, cz); burst(cx, .3, cz, 0xc9b79c, 28, 9); burst(cx, .4, cz, 0x6b7280, 14, 8);
+    grassSystem.addImpact(P.shockCenter, radius + 2, 1.5);
+  } else grassSystem.addImpact(new T.Vector3(cx, 0, cz), radius, 1.1);
   if (!B.dead && B.disp.some((position, i) => inRange(position, B.segs[i].s * .4, B.Y[i]))) {
     // One shared-health hit per strike, even when several body segments are in range.
-    B.hp = Math.max(0, B.hp - 260); B.segs.forEach((s, i) => { if (inRange(B.disp[i], s.s * .4, B.Y[i])) s.f = .8 });
+    B.hp = Math.max(0, B.hp - 260 * m); B.segs.forEach((s, i) => { if (inRange(B.disp[i], s.s * .4, B.Y[i])) s.f = .8 });
     if (B.hp === 0) { B.dead = true; B.state = 'dead'; flyers.forEach(f => scene.remove(f.g)); flyers.length = 0 }
   }
-  for (let i = flyers.length - 1; i >= 0; i--) { const f = flyers[i]; if (!inRange(f.g.position, .3)) continue; f.hp -= 160; f.f = .15; if (f.hp <= 0) { shatterModel(f.g, 32); burst(f.g.position.x, f.g.position.y, f.g.position.z, 0x44ff99, 12); scene.remove(f.g); flyers.splice(i, 1) } }
-  for (const u of A.u) if (!u.dead && u.rise >= 1 && inRange(u.g.position, .4)) { skelHurt(u, 160); if (!u.dead) { const dx = u.g.position.x - P.pos.x, dz = u.g.position.z - P.pos.z, d = Math.hypot(dx, dz) || 1; u.g.position.x += dx / d * .8; u.g.position.z += dz / d * .8 } }
-  if (R.on && !R.dead && inRange(rg.position, 2, rg.position.y)) robotHurt(240);
-  if (E.on && !E.dead && inRange(eg.position, 2.7, eg.position.y)) ettinHurt(240);
+  for (let i = flyers.length - 1; i >= 0; i--) { const f = flyers[i]; if (!inRange(f.g.position, .3)) continue; f.hp -= 160 * m; f.f = .15; if (f.hp <= 0) { shatterModel(f.g, 32); burst(f.g.position.x, f.g.position.y, f.g.position.z, 0x44ff99, 12); scene.remove(f.g); flyers.splice(i, 1) } }
+  for (const u of A.u) if (!u.dead && u.rise >= 1 && inRange(u.g.position, .4)) { skelHurt(u, 160 * m); if (!u.dead) { const dx = u.g.position.x - P.pos.x, dz = u.g.position.z - P.pos.z, d = Math.hypot(dx, dz) || 1; u.g.position.x += dx / d * hit.push; u.g.position.z += dz / d * hit.push } }
+  if (R.on && !R.dead && inRange(rg.position, 2, rg.position.y)) robotHurt(240 * m);
+  if (E.on && !E.dead && inRange(eg.position, 2.7, eg.position.y)) ettinHurt(240 * m);
+}
+// Avança o combo: reavalia a mira, dá o avanço curto, dispara os impactos e anima o rastro/onda de choque.
+function stepFieldCombo(player, dt) {
+  let c = player.combo;
+  if (c && (player.hp <= 0 || over)) player.combo = c = null;
+  if (c) {
+    const before = c.elapsed; c.elapsed += dt;
+    while (c.aimed < 3 && c.elapsed >= FIELD_COMBO[c.aimed].aim) {
+      if (c.aimed > 0) { const dx = aim.x - player.pos.x, dz = aim.z - player.pos.z; if (Math.hypot(dx, dz) > .01) c.face = Math.atan2(dx, dz) }
+      c.aimed++;
+    }
+    // Avanço na direção do golpe nos 0,12 s que antecedem cada impacto.
+    let advance = 0;
+    for (const h of FIELD_COMBO) advance += h.lunge * Math.max(0, Math.min(c.elapsed, h.at) - Math.max(before, h.at - .12)) / .12;
+    if (advance > 0) {
+      player.pos.x += Math.sin(c.face) * advance; player.pos.z += Math.cos(c.face) * advance;
+      const r = Math.hypot(player.pos.x, player.pos.z); if (r > arenaRadius - 1.5) { player.pos.x *= (arenaRadius - 1.5) / r; player.pos.z *= (arenaRadius - 1.5) / r }
+      player.g.position.copy(player.pos);
+    }
+    while (c.hit < 3 && c.elapsed >= FIELD_COMBO[c.hit].at) { meleeImpact(c.hit); c.hit++ }
+    if (c.elapsed >= FIELD_COMBO_END) player.combo = null;
+  }
+  player.strike = Math.max(0, player.strike - dt);
+  const active = player.strike > 0 && player.hp > 0, h = FIELD_COMBO[player.strikeHit];
+  player.meleeRing.visible = active; player.meleeShock.visible = active && player.strikeHit === 2;
+  if (!active) return;
+  const progress = 1 - player.strike / h.fx, ring = player.meleeRing;
+  ring.position.set(player.pos.x, player.pos.y + h.y, player.pos.z);
+  ring.rotation.set(h.tilt[0] + (h.tilt[1] - h.tilt[0]) * progress, (player.combo?.face ?? player.face) + h.sweep[0] + (h.sweep[1] - h.sweep[0]) * progress, h.roll);
+  ring.scale.setScalar(h.radius * (.6 + .4 * Math.min(1, progress * 2.2)));
+  ring.material.color.setHex(h.color); ring.material.opacity = (1 - progress) * .95;
+  if (player.meleeShock.visible) {
+    const shock = player.meleeShock; shock.position.set(player.shockCenter.x, .1, player.shockCenter.z);
+    shock.scale.setScalar(1 + progress * h.radius * .7); shock.material.opacity = (1 - progress) * .85;
+  }
+}
+// Aplica a pose do combo por cima da pose de andar/boost.
+function applyFieldComboPose(player) {
+  const { rig, lL, lR, aL, aR } = player.rigRefs, c = player.combo;
+  if (!c) { rig.rotation.y = 0; return }
+  const p = comboPose(c.elapsed);
+  aL.rotation.x = p[0]; aL.rotation.z = p[1]; aR.rotation.x = p[2]; aR.rotation.z = p[3];
+  rig.rotation.set(p[5], p[4], p[6]); rig.position.y = p[7]; lL.rotation.x = p[8]; lR.rotation.x = p[9];
 }
 function animateCharacter(player, dt) {
   if (player.hp <= 0 || over) { player.specialState = null; if (player.specialEffect) player.specialEffect.visible = false }
@@ -169,25 +245,9 @@ function animateCharacter(player, dt) {
     const moving = Math.min(1, Math.hypot(player.vx, player.vz) / 9);
     player.rigRefs.legs.forEach((leg, i) => { const phase = player.ph + (i === 0 || i === 3 ? 0 : Math.PI); leg.rotation.set(Math.sin(phase) * .24 * moving, 0, 0); leg.position.y = 2.2 + Math.max(0, Math.cos(phase)) * .15 * moving }); updateBoostPose(player, dt); return;
   }
-  if (player.character === 'fieldfighter' && player.combo) {
-    if (player.hp <= 0 || over) player.combo = null;
-    else { player.combo.elapsed += dt; if (!player.combo.second && player.combo.elapsed >= .28) { player.combo.second = true; meleeImpact() } if (player.combo.elapsed >= .58) player.combo = null }
-  }
-  if (player.character === 'fieldfighter') {
-    player.strike = Math.max(0, player.strike - dt);
-    const active = player.strike > 0 && player.hp > 0;
-    player.meleeRing.visible = active;
-    if (active) {
-      const progress = 1 - player.strike / .25;
-      const arm = player.combo?.second ? player.rigRefs.aR : player.rigRefs.aL; arm.rotation.x = -2.5 + progress * 3.5;
-      player.rigRefs.rig.rotation.x += Math.sin(progress * Math.PI) * .25;
-      player.meleeRing.position.set(player.pos.x, player.pos.y + .12, player.pos.z);
-      player.meleeRing.rotation.y = player.combo?.face ?? player.face;
-      player.meleeRing.scale.setScalar(.5 + progress * CHARACTERS.fieldfighter.radius);
-      player.meleeRing.material.opacity = (1 - progress) * .95;
-    }
-  }
+  if (player.character === 'fieldfighter') stepFieldCombo(player, dt);
   updateBoostPose(player, dt);
+  if (player.character === 'fieldfighter') applyFieldComboPose(player);
 }
 function buildArachnodroid() {
   const g = new T.Group(), rig = new T.Group(), mech = new T.Group(); g.add(rig); rig.add(mech); mech.scale.setScalar(.65);
@@ -225,11 +285,12 @@ function fireLaser(dt) {
   if (spark) burst(hit.point.x, hit.point.y, hit.point.z, 0x37ccff, 5, 4);
 }
 function updateDash(dt, input, ix, iz) {
-  const initialCost = 25, sustainCost = 12, regen = 20, held = !!(input.dashHeld || input.keys?.ShiftLeft || input.keys?.ShiftRight || input.keys?.KeyQ);
+  const initialCost = 10, sustainCost = 3, regen = 20, held = !!(input.dashHeld || input.keys?.ShiftLeft || input.keys?.ShiftRight || input.keys?.KeyQ);
   P.dashFuel = Math.max(0, Math.min(100, P.dashFuel ?? 100)); P.dashCooldown = Math.max(0, (P.dashCooldown || 0) - dt); P.dashFuelDelay = Math.max(0, (P.dashFuelDelay || 0) - dt);
   if (input.dash && P.dashCooldown <= 0 && P.dashFuel >= initialCost && !P.specialState) {
     const length = Math.hypot(ix, iz); P.dashX = length ? ix / length : Math.sin(P.face); P.dashZ = length ? iz / length : Math.cos(P.face);
     P.dashFuel -= initialCost; P.dashFuelDelay = .7; P.dashTime = .18; P.dashActive = true; P.dashCooldown = .28; P.inv = Math.max(P.inv, .2); burst(P.pos.x, P.pos.y + .3, P.pos.z, 0x88ddff, 8, 4);
+    if (!P.ground) P.glideTime = GLIDE_DURATION;
   }
   let boosting = false;
   if (P.dashActive && P.dashFuel > 0 && (P.dashTime > 0 || held) && !P.specialState) {

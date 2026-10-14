@@ -20,7 +20,7 @@ module.exports=async function testBoostParry(browser,url,errors){
       for(let i=0;i<12;i++)updatePlayer(.05,{...input,dash:false});const sustained=P.dashFuel,distance=P.pos.x;
       updateCamera(.2,0,0);updateTeamUI();ren.setRenderTarget(null);ren.render(scene,cam);return {immediate,sustained,distance,particles:P.boostEffect.children.length,visible:P.boostEffect.visible,emitters:P.boostEffect.userData.emitters,pose:P.boostPose,lean:P.rigRefs.rig.rotation.z,arm:P.rigRefs.aR.rotation.x};
     });
-    assert.equal(ranger.immediate,75);assert.ok(ranger.sustained>69&&ranger.sustained<70&&ranger.distance>10,JSON.stringify(ranger));assert.equal(ranger.particles,20);assert.equal(ranger.emitters.length,4);assert.ok(ranger.emitters.filter(e=>e[1]>2).length===2&&ranger.visible);assert.ok(ranger.pose>.98&&Math.abs(ranger.lean)>.45&&ranger.arm>.45,JSON.stringify(ranger));
+    assert.equal(ranger.immediate,90);assert.ok(ranger.sustained>88&&ranger.sustained<90&&ranger.distance>10,JSON.stringify(ranger));assert.equal(ranger.particles,20);assert.equal(ranger.emitters.length,4);assert.ok(ranger.emitters.filter(e=>e[1]>2).length===2&&ranger.visible);assert.ok(ranger.pose>.98&&Math.abs(ranger.lean)>.45&&ranger.arm>.45,JSON.stringify(ranger));
     await page.screenshot({path:'test-results/boost-bipede-slide.png'});
 
     const fieldfighter=await page.evaluate(()=>{
@@ -36,7 +36,7 @@ module.exports=async function testBoostParry(browser,url,errors){
       const input={keys:{KeyD:true,ShiftLeft:true},dash:true,dashHeld:true,shoot:false,parry:false,cameraYaw:Math.PI};for(let i=0;i<8;i++){updatePlayer(.05,input);input.dash=false}P.face=0;P.g.rotation.y=0;animateCharacter(P,.05);
       updateCamera(.2,0,0);updateTeamUI();ren.setRenderTarget(null);ren.render(scene,cam);return {fuel:P.dashFuel,visible:P.boostEffect.visible,emitters:P.boostEffect.userData.emitters,allAtFeet:P.boostEffect.userData.emitters.every(e=>e[1]<1),pose:P.boostPose,lean:P.rigRefs.rig.rotation.z,leg:P.rigRefs.legs[1].rotation.x};
     });
-    assert.ok(arachnodroid.fuel<75&&arachnodroid.visible&&arachnodroid.allAtFeet&&arachnodroid.pose>.99&&Math.abs(arachnodroid.lean)>.45&&arachnodroid.leg<-.3,JSON.stringify(arachnodroid));assert.equal(arachnodroid.emitters.length,4);
+    assert.ok(arachnodroid.fuel>88&&arachnodroid.fuel<90&&arachnodroid.visible&&arachnodroid.allAtFeet&&arachnodroid.pose>.99&&Math.abs(arachnodroid.lean)>.45&&arachnodroid.leg<-.3,JSON.stringify(arachnodroid));assert.equal(arachnodroid.emitters.length,4);
     await page.screenshot({path:'test-results/boost-arachnodroid-slide.png'});
 
     const recovery=await page.evaluate(()=>{for(let i=0;i<120;i++)updatePlayer(.05,{keys:{},dash:false,dashHeld:false,shoot:false,parry:false,cameraYaw:Math.PI});updateTeamUI();return {fuel:P.dashFuel,pose:P.boostPose,label:$('boost-label').textContent,width:$('boost-fill').style.width}});

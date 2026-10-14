@@ -20,6 +20,9 @@ const {createArenaServer}=require('../server');
     if(process.argv.includes('--third-person-camera')){await require('./third-person-camera.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
     if(process.argv.includes('--boost-parry')){await require('./boost-parry.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
     if(process.argv.includes('--menu-design')){await require('./menu-design.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--multiplayer-sync')){await require('./multiplayer-sync.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--inferno')){await require('./inferno.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--audio')){await require('./audio.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
     const context=await browser.newContext({viewport:{width:1200,height:800}});
     const host=await context.newPage(),guest=await context.newPage();
     for(const page of [host,guest])page.on('pageerror',e=>errors.push(e.message));
