@@ -15,6 +15,11 @@ function createArenaServer() {
     '/specials.js': ['specials.js', 'text/javascript; charset=utf-8'],
     '/ettin.js': ['ettin.js', 'text/javascript; charset=utf-8'],
     '/grass-system.js': ['grass-system.js', 'text/javascript; charset=utf-8'],
+    '/inferno-world.js': ['inferno-world.js', 'text/javascript; charset=utf-8'],
+    '/audio-system.js': ['audio-system.js', 'text/javascript; charset=utf-8'],
+    '/audio/fire-minigun.mp3': ['audio/fire-minigun.mp3', 'audio/mpeg'],
+    '/audio/spawn-gollen.mp3': ['audio/spawn-gollen.mp3', 'audio/mpeg'],
+    '/audio/the-outsider-apocalypse-mix.mp3': ['audio/the-outsider-apocalypse-mix.mp3', 'audio/mpeg'],
     '/personagem/ettin-model.js': ['personagem/ettin-model.js', 'text/javascript; charset=utf-8'],
     '/final-arena.js': ['final-arena.js', 'text/javascript; charset=utf-8'],
     '/death-physics.js': ['death-physics.js', 'text/javascript; charset=utf-8'],
@@ -28,7 +33,10 @@ function createArenaServer() {
     let pathname;
     try { pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); }
     catch { res.writeHead(400).end(); return; }
-    const file = files[pathname];
+    let file = files[pathname];
+    // Root gameplay modules are safe to add without requiring a server restart
+    // merely to register another script in this table.
+    if(!file&&/^\/[a-z0-9-]+\.js$/i.test(pathname)&&!['/server.js'].includes(pathname))file=[pathname.slice(1),'text/javascript; charset=utf-8'];
     if (!file || !['GET', 'HEAD'].includes(req.method)) { res.writeHead(404).end(); return; }
     fs.readFile(path.join(__dirname, file[0]), (err, data) => {
       if (err) { res.writeHead(500).end('Arquivo indisponível. Execute npm install.'); return; }
@@ -102,7 +110,7 @@ function createArenaServer() {
         }
         ws.name = clean(msg.name, 'Robô');
         ws.character = ['ranger','fieldfighter','arachnodroid'].includes(msg.character) ? msg.character : 'ranger';
-        const mode = [0, 1, 2, 3, 4, 5].includes(msg.mode) ? msg.mode : 0;
+        const mode = [0, 1, 2, 3, 4, 5, 6].includes(msg.mode) ? msg.mode : 0;
         const next = { id: randomUUID(), name: clean(msg.roomName, 'Arena dos amigos'), host: ws.id,
           difficulty: { health: difficulty.health, speed: difficulty.speed,
             attacks: difficulty.attacks, perPlayer: difficulty.perPlayer },
@@ -129,7 +137,7 @@ function createArenaServer() {
       }
       if (msg.type === 'start') {
         if (room.host !== ws.id || room.status !== 'waiting') return error('Apenas o criador pode iniciar.');
-        if (![0, 1, 2, 3, 4, 5].includes(msg.mode)) return error('Boss inválido.');
+        if (![0, 1, 2, 3, 4, 5, 6].includes(msg.mode)) return error('Boss inválido.');
         room.mode = msg.mode; room.status = 'playing';
         // Difficulty is frozen for this match, even if someone disconnects.
         const factor = room.difficulty.perPlayer ? room.players.size : 1;

@@ -3,12 +3,13 @@
 const GRASS_CONFIG={
   grassDensity:1200,
   grassFinalDensity:2600,
+  grassInfernoDensity:10000,
   grassMinScale:.38,
   grassMaxScale:.78,
   grassWindStrength:.17,
   grassWindSpeed:1,
   grassInteractionRadius:2.7,
-  grassRenderDistance:100,
+  grassRenderDistance:(()=>Math.max(30,Math.min(180,Number(localStorage.getItem('arena-vegetation-distance')??100))))(),
   grassDensityMultiplier:(()=>{const current=localStorage.getItem('arena-grass-amount-v2'),legacy=localStorage.getItem('arena-grass-amount');const amount=Number(current??(legacy===null?10:Number(legacy)/10));return Math.max(.1,Math.min(10,amount/10))})(),
   showGrassBounds:false,
   showGrassDensity:false,
@@ -21,7 +22,7 @@ class GrassSystem{
   constructor(scene,texture,config={}){
     this.scene=scene;this.texture=texture;this.config=Object.assign({},GRASS_CONFIG,config);
     this.supported=ren.capabilities.isWebGL2||!!ren.extensions.get('ANGLE_instanced_arrays');
-    this.radius=0;this.mesh=null;this.time=0;this.gustClock=0;this.gustIndex=0;this.gustDuration=2.7;
+    this.radius=0;this.mesh=null;this.time=0;this.gustClock=0;this.gustIndex=0;this.gustDuration=2.7;this.patchCenter=new T.Vector2();
     this.windDirection=new T.Vector2(.86,.51).normalize();this.windStrength=1;
     this.players=[];this.impacts=[];this.exclusionZones=[];this.shader=null;
     this.uniforms={
@@ -122,19 +123,21 @@ void main(){gl_FragColor=vec4(vGrassTint,1.0);}`;
   }
   isExcluded(x,z){return this.exclusionZones.some(zone=>Math.hypot(x-zone.x,z-zone.z)<zone.radius)}
   setExclusionZones(zones=[]){this.exclusionZones=zones.slice();if(this.radius)this.rebuild()}
-  countForRadius(radius){const base=radius>40?this.config.grassFinalDensity:this.config.grassDensity;return Math.max(0,Math.round(base*this.config.grassDensityMultiplier))}
-  setArenaRadius(radius){if(this.radius===radius&&this.mesh)return;this.radius=radius;this.rebuild()}
-  rebuild(){
+  countForRadius(radius){const base=radius>100?this.config.grassInfernoDensity:radius>40?this.config.grassFinalDensity:this.config.grassDensity;return Math.max(0,Math.min(radius>100?50000:26000,Math.round(base*this.config.grassDensityMultiplier)))}
+  setArenaRadius(radius){if(this.radius===radius&&this.mesh)return;this.radius=radius;this.patchCenter.set(0,0);this.rebuild()}
+  rebuild(center=this.patchCenter){
     if(this.mesh){this.scene.remove(this.mesh);this.mesh.geometry.dispose()}
     if(!this.supported){this.mesh=null;return}
     const count=this.countForRadius(this.radius),geometry=this.createGeometry(),phases=new Float32Array(count),flexes=new Float32Array(count),tints=new Float32Array(count*3);
-    const mesh=new T.InstancedMesh(geometry,this.material,count),dummy=new T.Object3D(),random=this.random(this.config.seed+(this.radius*997|0));
+    const streaming=this.radius>100,patchRadius=streaming?Math.min(this.radius-.65,this.config.grassRenderDistance*1.12):this.radius-.65;
+    if(streaming)this.patchCenter.copy(center);else this.patchCenter.set(0,0);
+    const cellX=Math.floor(this.patchCenter.x/12),cellZ=Math.floor(this.patchCenter.y/12),mesh=new T.InstancedMesh(geometry,this.material,count),dummy=new T.Object3D(),random=this.random(this.config.seed+(this.radius*997|0)+Math.imul(cellX,73856093)+Math.imul(cellZ,19349663));
     mesh.name='Animated arena grass';mesh.castShadow=false;mesh.receiveShadow=false;mesh.frustumCulled=false;mesh.userData.grassSystem=true;
     const edgeStart=this.radius*.82;let placed=0,attempts=0;
-    while(placed<count&&attempts<count*80){attempts++;const angle=random()*Math.PI*2,radius=Math.sqrt(random())*(this.radius-.65),x=Math.cos(angle)*radius,z=Math.sin(angle)*radius;if(this.isExcluded(x,z))continue;
-      const edge=1-Math.max(0,(radius-edgeStart)/(this.radius-edgeStart))*.68,density=this.densityAt(x,z,this.radius)*edge;if(random()>Math.min(1,density))continue;
+    while(placed<count&&attempts<count*80){attempts++;const angle=random()*Math.PI*2,localRadius=Math.sqrt(random())*patchRadius,x=this.patchCenter.x+Math.cos(angle)*localRadius,z=this.patchCenter.y+Math.sin(angle)*localRadius,worldRadius=Math.hypot(x,z);if(worldRadius>this.radius-.65||this.isExcluded(x,z))continue;
+      const edge=streaming?1:1-Math.max(0,(worldRadius-edgeStart)/(this.radius-edgeStart))*.68,density=this.densityAt(x,z,this.radius)*edge;if(random()>Math.min(1,density))continue;
       const scale=this.config.grassMinScale+random()*(this.config.grassMaxScale-this.config.grassMinScale),height=scale*(.82+random()*.38),width=scale*(.82+random()*.3);
-      dummy.position.set(x,.025,z);dummy.rotation.set((random()-.5)*.08,random()*Math.PI*2,(random()-.5)*.08);dummy.scale.set(width,height,width);dummy.updateMatrix();mesh.setMatrixAt(placed,dummy.matrix);
+      const groundY=streaming&&typeof terrainHeightAt==='function'?terrainHeightAt(x,z):0;dummy.position.set(x,groundY+.025,z);dummy.rotation.set((random()-.5)*.08,random()*Math.PI*2,(random()-.5)*.08);dummy.scale.set(width,height,width);dummy.updateMatrix();mesh.setMatrixAt(placed,dummy.matrix);
       phases[placed]=random()*Math.PI*2;flexes[placed]=.68+random()*.58;
       const densityShade=this.densityAt(x,z,this.radius),color=this.config.showGrassDensity?new T.Color().setHSL(.33,1,.25+.25*densityShade):new T.Color([0x76c95a,0x82d463,0x91dc6c,0x6fbd55][Math.floor(random()*4)]);color.toArray(tints,placed*3);placed++;
     }
@@ -151,11 +154,13 @@ void main(){gl_FragColor=vec4(vGrassTint,1.0);}`;
     const wind=this.config.disableGrassWind?0:this.config.grassWindStrength*this.windStrength;this.uniforms.uWindStrength.value=wind;
     if(local<dt){this.gustIndex++;const angle=this.gustIndex*2.399963;this.uniforms.uGust.value.set(Math.cos(angle),Math.sin(angle),0,-this.radius-12)}
     const gust=this.uniforms.uGust.value;if(!this.config.disableGrassWind&&local<this.gustDuration){const envelope=Math.sin(local/this.gustDuration*Math.PI);gust.z=envelope*.34*this.windStrength;gust.w=-this.radius-10+local/this.gustDuration*(this.radius*2+20)}else gust.z=0;
-    const source=playerPositions||this.players,playerUniforms=this.uniforms.uPlayerData.value;let playerCount=0;
+    const source=[...(playerPositions||this.players||[])],playerUniforms=this.uniforms.uPlayerData.value;let playerCount=0;
+    if(this.radius>100&&source){const focus=[...source].find(entry=>entry&&(entry.hp===undefined||entry.hp>0)),position=focus&&(focus.pos||focus);if(position&&Math.hypot(position.x-this.patchCenter.x,position.z-this.patchCenter.y)>this.config.grassRenderDistance*.32)this.rebuild(new T.Vector2(position.x,position.z))}
     if(!this.config.disableGrassInteraction&&source)for(const entry of source){if(playerCount===4)break;if(entry&&entry.hp!==undefined&&entry.hp<=0)continue;const position=entry&&entry.pos!==undefined?entry.pos:entry;if(!position)continue;const x=position.x!==undefined?position.x:position[0],z=position.z!==undefined?position.z:position[2];if(x===undefined||z===undefined)continue;playerUniforms[playerCount++].set(x,z,this.config.grassInteractionRadius,1.05)}
     this.uniforms.uPlayerCount.value=playerCount;
     for(let i=this.impacts.length-1;i>=0;i--){const impact=this.impacts[i];impact.age+=dt;if(impact.age>=impact.life)this.impacts.splice(i,1)}
     const impactUniforms=this.uniforms.uImpactData.value;let impactCount=0;if(!this.config.disableGrassInteraction)for(const impact of this.impacts){const fade=1-impact.age/impact.life;impactUniforms[impactCount++].set(impact.x,impact.z,impact.radius,impact.strength*fade*fade);if(impactCount===4)break}this.uniforms.uImpactCount.value=impactCount;
+    if(typeof updateInfernoFlora==='function')updateInfernoFlora(source);
   }
 }
 
