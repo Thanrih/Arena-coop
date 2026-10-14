@@ -178,6 +178,7 @@ function meleeImpact(index = 1) {
   P.strike = hit.fx; P.strikeHit = index; P.inv = Math.max(P.inv, hit.inv); shake = Math.max(shake, hit.shake);
   const reach = index === 2 ? 3.2 : 2, cx = P.pos.x + Math.sin(face) * reach, cz = P.pos.z + Math.cos(face) * reach;
   burst(cx, P.pos.y + .4, cz, 0xffb83e, index === 2 ? 26 : index ? 18 : 12, index === 2 ? 10 : 8);
+  if(typeof destroyInfernoProps==='function')destroyInfernoProps(new T.Vector3(cx,P.pos.y,cz),radius*.72);
   if (index === 1) burst(cx, P.pos.y + .6, cz, 0xffffff, 8, 7);
   if (index === 2) {
     // Esmagamento: onda de choque, poeira e destroços no ponto de impacto.
@@ -209,7 +210,7 @@ function stepFieldCombo(player, dt) {
     for (const h of FIELD_COMBO) advance += h.lunge * Math.max(0, Math.min(c.elapsed, h.at) - Math.max(before, h.at - .12)) / .12;
     if (advance > 0) {
       player.pos.x += Math.sin(c.face) * advance; player.pos.z += Math.cos(c.face) * advance;
-      const r = Math.hypot(player.pos.x, player.pos.z); if (r > arenaRadius - 1.5) { player.pos.x *= (arenaRadius - 1.5) / r; player.pos.z *= (arenaRadius - 1.5) / r }
+      Collision.resolve(player.pos,.65,arenaRadius,{ground:player.ground});
       player.g.position.copy(player.pos);
     }
     while (c.hit < 3 && c.elapsed >= FIELD_COMBO[c.hit].at) { meleeImpact(c.hit); c.hit++ }
@@ -277,6 +278,7 @@ function fireLaser(dt) {
   const length = hit ? hit.distance : 42;
   P.laserBeam.position.copy(origin).addScaledVector(direction, length / 2); P.laserBeam.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), direction); P.laserBeam.scale.set(1, length, 1); P.laserTime = .14; P.laserBeam.visible = true;
   if (!hit) return;
+  const worldProp=typeof infernoPropFromIntersection==='function'?infernoPropFromIntersection(hit):null;if(worldProp){destroyInfernoProp(worldProp);infernoWorldRevision++;if(spark)burst(hit.point.x,hit.point.y,hit.point.z,0x37ccff,5,4);return}
   const belongs = root => { for (let o = hit.object; o; o = o.parent)if (o === root) return true; return false };
   if (!B.dead && B.segs.some(s => belongs(s.root))) { B.hp = Math.max(0, B.hp - 28 * factor); B.segs.forEach(s => { if (belongs(s.root)) s.f = .15 }); if (!B.hp) { B.dead = true; B.state = 'dead'; flyers.forEach(f => scene.remove(f.g)); flyers.length = 0 } }
   else if (R.on && !R.dead && belongs(rg)) robotHurt(32 * factor);

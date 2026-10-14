@@ -36,6 +36,10 @@
 .difficulty-check{display:flex;align-items:center;gap:8px;margin:12px 0;font-size:14px}
 #menu .difficulty-check input{width:18px;height:18px;padding:0;accent-color:#ffd84a;flex-shrink:0}
 #difficulty-settings small{display:block;color:#9fd6ff;font-size:12px}
+#respawn-settings{margin-top:14px;padding-top:13px;border-top:1px solid #678a50;display:grid;gap:8px}
+#respawn-settings>strong{color:#ffd84a}
+.lives-field{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px}
+#menu .lives-field input{width:96px}
 @media(max-width:480px){.difficulty-fields{grid-template-columns:1fr}}
 #rooms{display:grid;gap:8px;margin:12px 0;max-height:230px;overflow:auto}
 .room-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#15263c;padding:12px;text-align:left;border:1px solid #4a6a94;border-radius:5px}

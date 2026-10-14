@@ -54,7 +54,7 @@ function applySpecial(dt){
   }else if(state.type==='fieldfighter'){
     const from=P.pos.clone(),horizontal=state.direction.clone();horizontal.y=0;
     if(horizontal.lengthSq()<.001)horizontal.set(Math.sin(P.face),0,Math.cos(P.face));horizontal.normalize();
-    P.pos.addScaledVector(horizontal,34*step);const radius=Math.hypot(P.pos.x,P.pos.z);if(radius>arenaRadius-1.5){P.pos.x*=(arenaRadius-1.5)/radius;P.pos.z*=(arenaRadius-1.5)/radius}
+    P.pos.addScaledVector(horizontal,34*step);Collision.resolve(P.pos,.65,arenaRadius,{ground:P.ground});if(typeof destroyInfernoProps==='function')destroyInfernoProps(P.pos,1.25);
     damageSpecialTargets(segmentRange(from,P.pos,1.4,true),240,state.hits);
     lineEffect(P.specialEffect,state.origin,P.pos.clone().add(new T.Vector3(0,1.7,0)),.45);
   }else{
@@ -80,7 +80,7 @@ function updateSpecialMissiles(dt){
     if(missile.time>.12&&missile.m.position.distanceTo(missile.target)>1)missile.direction.lerp(missile.target.clone().sub(missile.m.position).normalize(),Math.min(1,dt*5)).normalize();
     const distance=24*dt,hit=new T.Raycaster(missile.m.position,missile.direction,0,distance+.25).intersectObjects(picks(),true).find(h=>h.object.material!==lineM);
     missile.m.position.addScaledVector(missile.direction,distance);missile.m.lookAt(missile.m.position.clone().add(missile.direction));
-    if(hit){const point=hit.point;damageSpecialTargets((q,padding)=>q.distanceTo(point)<=2+padding,80);burst(point.x,point.y,point.z,0xffaa33,12,7);grassSystem.addImpact(point,5,.9)}
-    if(hit||missile.life<=0||over||missile.m.position.y<0||Math.hypot(missile.m.position.x,missile.m.position.z)>arenaRadius+28){scene.remove(missile.m);specialMissiles.splice(i,1)}
+    if(hit){const point=hit.point,worldProp=typeof infernoPropFromIntersection==='function'?infernoPropFromIntersection(hit):null;if(worldProp){destroyInfernoProp(worldProp);infernoWorldRevision++}damageSpecialTargets((q,padding)=>q.distanceTo(point)<=2+padding,80);destroyInfernoProps(point,2.2);burst(point.x,point.y,point.z,0xffaa33,12,7);grassSystem.addImpact(point,5,.9)}
+    if(hit||missile.life<=0||over||missile.m.position.y<Collision.heightAt(missile.m.position.x,missile.m.position.z)||Math.hypot(missile.m.position.x,missile.m.position.z)>arenaRadius+28){scene.remove(missile.m);specialMissiles.splice(i,1)}
   }
 }

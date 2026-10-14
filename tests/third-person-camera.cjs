@@ -25,6 +25,13 @@ module.exports=async function testThirdPersonCamera(browser,url,errors){
       localPlayer.vx=localPlayer.vz=0;for(let i=0;i<90;i++)updateCamera(1/60,0,0);return {zoomed,target:thirdPersonCamera.targetDistance,blurPeak,blurEnd:PU.b.value,rotated,movingFov,roll};
     });
     assert.ok(motion.target>15&&motion.zoomed>14,JSON.stringify(motion));assert.ok(motion.rotated&&motion.blurPeak>.1&&motion.blurEnd<motion.blurPeak,JSON.stringify(motion));assert.ok(motion.movingFov>58&&Math.abs(motion.roll)>.001,JSON.stringify(motion));
+    const cameraCollision=await page.evaluate(()=>{
+      const anchor=new T.Vector3(0,2.1,0),desired=new T.Vector3(0,4.8,11),wall={id:9001,x:0,z:5,y:0,radius:1.8,height:10,destroyed:false};
+      Collision.setWorld((x,z)=>z>8?9:0,()=>[wall]);const againstWall=Collision.cameraSweep(anchor,desired,.42,arenaRadius);
+      Collision.setWorld((x,z)=>z>3?7:0,()=>[]);const againstGround=Collision.cameraSweep(anchor,desired,.42,arenaRadius);
+      Collision.setWorld(null,null);return {wallZ:againstWall.z,wallY:againstWall.y,groundZ:againstGround.z,groundY:againstGround.y};
+    });
+    assert.ok(cameraCollision.wallZ<3&&cameraCollision.groundZ<3.2&&cameraCollision.wallY>=.42&&cameraCollision.groundY>=.42,JSON.stringify(cameraCollision));
     const verticalAim=await page.evaluate(()=>{
       localPlayer.vx=localPlayer.vz=0;resetThirdPersonCamera(Math.PI);camT.set(0,5,11);
       rotateThirdPersonCamera(0,-500);for(let i=0;i<30;i++)updateCamera(1/60,0,0);ray.setFromCamera(thirdPersonAimPoint,cam);const up=ray.ray.direction.y;
