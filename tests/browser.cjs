@@ -16,6 +16,16 @@ const {createArenaServer}=require('../server');
     if(process.argv.includes('--grass')){await require('./grass.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
     if(process.argv.includes('--pause-options')){await require('./pause-options.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
     if(process.argv.includes('--skeleton-count')){await require('./skeleton-count.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--centipede-burrow')){await require('./centipede-burrow.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--third-person-camera')){await require('./third-person-camera.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--boost-parry')){await require('./boost-parry.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--menu-design')){await require('./menu-design.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--multiplayer-sync')){await require('./multiplayer-sync.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--inferno')){await require('./inferno.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--audio')){await require('./audio.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--arachnodroid')){await require('./arachnodroid.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--lighting')){await require('./lighting.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
+    if(process.argv.includes('--respawn')){await require('./respawn.cjs')(browser,url,errors);assert.deepEqual(errors,[]);return}
     const context=await browser.newContext({viewport:{width:1200,height:800}});
     const host=await context.newPage(),guest=await context.newPage();
     for(const page of [host,guest])page.on('pageerror',e=>errors.push(e.message));
@@ -30,10 +40,11 @@ const {createArenaServer}=require('../server');
     await host.locator('#start-room').click();
     await guest.waitForFunction(()=>lastState?.players.length===2,{},{timeout:30000});
     await guest.mouse.move(900,300);await guest.locator('#aim-cursor').waitFor({state:'visible'});
-    assert.equal(await guest.locator('#aim-cursor').evaluate(e=>e.style.left),'900px');
-    assert.equal(await guest.locator('#aim-cursor').evaluate(e=>e.style.top),'300px');
+    assert.equal(await guest.locator('#aim-cursor').evaluate(e=>e.style.left),'600px');
+    assert.equal(await guest.locator('#aim-cursor').evaluate(e=>e.style.top),'400px');
     assert.equal(await guest.locator('#aim-cursor canvas').evaluate(e=>getComputedStyle(e).animationName),'aim-spin');
     assert.equal(await guest.locator('.aim-pulse').evaluate(e=>getComputedStyle(e).animationName),'aim-pulse');
+    await guest.evaluate(()=>{resetThirdPersonCamera(Math.PI);mouse.set(0,0)});
     assert.equal(await host.evaluate(()=>B.max),9600);
     assert.deepEqual(await host.evaluate(()=>bossDifficulty),{health:4,speed:4,attacks:4});
     const guestId=await guest.evaluate(()=>myId);
@@ -137,19 +148,21 @@ const {createArenaServer}=require('../server');
     await solo.waitForFunction(()=>started&&R.on);assert.equal(await solo.evaluate(()=>R.max),1800);assert.equal(await solo.evaluate(()=>players.size),1);
     await solo.locator('#aim-cursor').waitFor({state:'visible'});
     const cameraShift=await solo.evaluate(()=>{
-      cameraMouseOffset.set(0,0);camT.set(0,30,17);mouse.set(1,1);
-      for(let i=0;i<20;i++)updateCamera(.05,0,0);
-      return {x:camT.x,z:camT.z};
+      guestOnly=true;guestFrame=()=>{};localPlayer.pos.set(0,0,0);localPlayer.vx=localPlayer.vz=0;resetThirdPersonCamera(Math.PI);camT.set(0,5,11);
+      for(let i=0;i<20;i++)updateCamera(.05,0,0);const near=cam.position.distanceTo(localPlayer.pos);
+      zoomThirdPersonCamera(500);for(let i=0;i<20;i++)updateCamera(.05,0,0);const far=cam.position.distanceTo(localPlayer.pos);
+      const yaw=thirdPersonCamera.yaw;rotateThirdPersonCamera(120,-20);updateCamera(.016,0,0);
+      return {near,far,yawChanged:thirdPersonCamera.yaw!==yaw,blur:PU.b.value,fov:cam.fov};
     });
-    assert.ok(cameraShift.x>1&&cameraShift.x<=2.2);assert.ok(cameraShift.z<16&&cameraShift.z>=15.5);
+    assert.ok(cameraShift.near>10&&cameraShift.near<13);assert.ok(cameraShift.far>cameraShift.near+4);assert.ok(cameraShift.yawChanged&&cameraShift.blur>0);assert.ok(cameraShift.fov>=58);
     const parryCone=await solo.evaluate(()=>{
       P=localPlayer;P.hp=100;P.inv=P.parry=P.pcd=P.pHit=0;over=false;aim.set(P.pos.x,1,P.pos.z+10);startParry();
       hurt(10,new T.Vector3(P.pos.x,0,P.pos.z+2),'test');const front={hp:P.hp,hit:P.pHit,face:P.parryFace,cooldown:P.pcd};
       P.inv=P.parry=P.pcd=P.pHit=0;aim.set(P.pos.x,1,P.pos.z+10);startParry();hurt(10,new T.Vector3(P.pos.x,0,P.pos.z-2),'test');updParry(0);
-      return {front,backHp:P.hp,visual:Math.abs(P.ring.rotation.y-P.parryFace)<.001};
+      return {front,backHp:P.hp,backHit:P.pHit,visual:P.ring.visible&&P.ring.geometry.type==='SphereGeometry'&&P.ring.children.length===2};
     });
-    assert.equal(parryCone.front.hp,100);assert.equal(parryCone.front.hit,1);assert.equal(parryCone.front.cooldown,0);assert.equal(parryCone.backHp,90);assert.ok(parryCone.visual);
-    await solo.keyboard.press('e');await solo.waitForFunction(()=>localPlayer.pcd>0);await solo.keyboard.press('m');await solo.locator('#menu').waitFor({state:'visible'});
+    assert.equal(parryCone.front.hp,100);assert.equal(parryCone.front.hit,1);assert.equal(parryCone.front.cooldown,0);assert.equal(parryCone.backHp,100);assert.equal(parryCone.backHit,1);assert.ok(parryCone.visual);
+    await solo.evaluate(()=>{P.parry=P.pcd=0;B.dead=true;EP.forEach(p=>scene.remove(p.m));EP.length=0});await solo.keyboard.press('e');await solo.waitForFunction(()=>pendingParry||localPlayer.parry>0);await solo.keyboard.press('m');await solo.locator('#menu').waitFor({state:'visible'});
     await solo.locator('#aim-cursor').waitFor({state:'hidden'});
     const fighters=await browser.newContext({viewport:{width:1200,height:900}});
     const fighterHost=await fighters.newPage(),fighterGuest=await fighters.newPage();
@@ -173,7 +186,7 @@ const {createArenaServer}=require('../server');
     const fighterId=await fighterGuest.evaluate(()=>myId);
     assert.equal(await fighterHost.evaluate(id=>players.get(id).character,fighterId),'fieldfighter');
     const mappedModel=await fighterHost.evaluate(id=>{
-      const p=players.get(id),counts={};p.g.traverse(o=>{if(o.geometry)counts[o.geometry.userData.part]=o.geometry.attributes.position.count/3});
+      const p=players.get(id),counts={};p.g.traverse(o=>{if(o.geometry?.userData.part)counts[o.geometry.userData.part]=o.geometry.attributes.position.count/3});
       return {source:p.g.userData.source,sha:p.g.userData.objSha256,counts,reference:FIELD_FIGHTER_MODEL.triangles};
     },fighterId);
     assert.equal(mappedModel.source,'personagem/FieldFighter.zip');assert.match(mappedModel.sha,/^[a-f0-9]{64}$/);
@@ -195,16 +208,16 @@ const {createArenaServer}=require('../server');
     await fighterGuest.screenshot({path:'test-results/fieldfighter-impact.png'});
     await fighterGuest.keyboard.up('j');
     await fighterGuest.keyboard.press('Shift');
-    await fighterHost.waitForFunction(id=>players.get(id).dashCooldown>1,fighterId);
-    await fighterGuest.waitForFunction(()=>localPlayer.dashCooldown>0);
-    await fighterGuest.waitForFunction(()=>$('dash-status').textContent.startsWith('Dash:'));
-    assert.match(await fighterGuest.locator('#dash-status').innerText(),/Dash:/);
+    await fighterHost.waitForFunction(id=>players.get(id).dashFuel<100,fighterId);
+    await fighterGuest.waitForFunction(()=>localPlayer.dashFuel<100);
+    await fighterGuest.waitForFunction(()=>$('dash-status').textContent.includes('%'));
+    assert.match(await fighterGuest.locator('#dash-status').innerText(),/(BOOST|Combustível)/);
     const laser=await fighterHost.evaluate(()=>{
       P=localPlayer;localPlayer.pos.set(0,0,10);localPlayer.g.position.copy(localPlayer.pos);B.dead=true;R.on=false;
       A.u.forEach(u=>scene.remove(u.g));A.u.length=0;
       const target=mkSkel('w');target.rise=1;target.hp=1000;target.g.position.set(0,0,14);scene.add(target.g);A.u.push(target);
       aim.set(0,1.4,14);aimY=1.4;performAttack();
-      const counts={};P.g.traverse(o=>{if(o.geometry)counts[o.geometry.userData.part]=o.geometry.attributes.position.count/3});
+      const counts={};P.g.traverse(o=>{if(o.geometry?.userData.part)counts[o.geometry.userData.part]=o.geometry.attributes.position.count/3});
       return {hp:target.hp,visible:P.laserBeam.visible,source:P.g.userData.source,counts,expected:ARACHNODROID_MODEL.triangles};
     });
     assert.equal(laser.hp,968);assert.equal(laser.visible,true);assert.equal(laser.source,'personagem/Arachnodroid.zip');assert.deepEqual(laser.counts,laser.expected);
@@ -229,16 +242,16 @@ const {createArenaServer}=require('../server');
     const dashChecks=await soloFighter.evaluate(()=>{
       const results=[];P=localPlayer;
       for(const character of ['ranger','fieldfighter','arachnodroid']){
-        configureCharacter(P,character);P.pos.set(0,0,0);P.vx=P.vz=P.kx=P.kz=P.vy=0;P.hp=100;P.ground=true;
-        const input={keys:{KeyD:true},dash:true,shoot:false,parry:false};updatePlayer(.05,input);
-        const first=P.pos.x,cd=P.dashCooldown;updatePlayer(.05,input);const secondCooldown=P.dashCooldown;
-        for(let i=0;i<32;i++)updatePlayer(.05,{...input,keys:{},dash:false});
-        const ready=P.dashCooldown===0;updatePlayer(.05,input);
-        results.push({character,first,cd,secondCooldown,ready,restarted:P.dashCooldown>1});
+        configureCharacter(P,character);P.pos.set(0,0,0);P.vx=P.vz=P.kx=P.kz=P.vy=0;P.hp=100;P.ground=true;P.dashFuel=100;P.dashFuelDelay=P.dashCooldown=P.dashTime=0;P.dashActive=false;
+        const input={keys:{KeyD:true},dash:true,dashHeld:true,shoot:false,parry:false};updatePlayer(.05,input);
+        const first=P.pos.x,initialFuel=P.dashFuel;for(let i=0;i<10;i++)updatePlayer(.05,{...input,dash:false});const heldDistance=P.pos.x,heldFuel=P.dashFuel;
+        for(let i=0;i<100;i++)updatePlayer(.05,{...input,keys:{},dash:false,dashHeld:false});
+        const recovered=P.dashFuel===100;updatePlayer(.05,input);
+        results.push({character,first,initialFuel,heldDistance,heldFuel,recovered,restarted:P.dashFuel===75});
         P.hp=0;P.dashCooldown=0;const before=P.pos.clone();updatePlayer(.05,input);results.at(-1).deadStill=before.equals(P.pos)&&P.dashCooldown===0;
       }return results;
     });
-    for(const dash of dashChecks){assert.ok(dash.first>=1.5);assert.equal(dash.cd,1.5);assert.ok(dash.secondCooldown<dash.cd);assert.ok(dash.ready&&dash.restarted&&dash.deadStill)}
+    for(const dash of dashChecks){assert.ok(dash.first>=1.5);assert.equal(dash.initialFuel,75);assert.ok(dash.heldDistance>dash.first+5&&dash.heldFuel<dash.initialFuel);assert.ok(dash.recovered&&dash.restarted&&dash.deadStill)}
     await soloFighter.close();await fighters.close();
     await require('./arachnodroid.cjs')(browser,url,errors);
     await require('./specials.cjs')(browser,url,errors);
@@ -248,6 +261,10 @@ const {createArenaServer}=require('../server');
     await require('./grass.cjs')(browser,url,errors);
     await require('./pause-options.cjs')(browser,url,errors);
     await require('./skeleton-count.cjs')(browser,url,errors);
-    assert.deepEqual(errors,[]);console.log('Browser OK: LAN, all bosses, campaign, difficulty, mapped characters, two-hit cone combo, laser, dash cooldown, distance-based targets and continuous missiles against eight players.');
+    await require('./centipede-burrow.cjs')(browser,url,errors);
+    await require('./third-person-camera.cjs')(browser,url,errors);
+    await require('./boost-parry.cjs')(browser,url,errors);
+    await require('./menu-design.cjs')(browser,url,errors);
+    assert.deepEqual(errors,[]);console.log('Browser OK: LAN, all bosses, campaign, difficulty, mapped characters, two-hit cone combo, laser, fuel boost, omnidirectional parry, camera modes and continuous missiles against eight players.');
   }finally{await browser?.close();await arena.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

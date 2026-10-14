@@ -15,6 +15,8 @@ async function client(){
 test('HTTP serves the game and local assets without exposing workspace files',async()=>{
   assert.equal((await fetch(url)).status,200);
   assert.equal((await fetch(url+'/vendor/three.min.js')).status,200);
+  const menuBackground=await fetch(url+'/assets/menu-forest.png');assert.equal(menuBackground.status,200);assert.match(menuBackground.headers.get('content-type'),/^image\/png/);
+  for(const texturePath of ['/textures/ch%C3%A3o.png','/textures/tronco.png','/textures/pilar.png','/textures/folhas.png','/textures/pedras.png']){const texture=await fetch(url+texturePath);assert.equal(texture.status,200);assert.match(texture.headers.get('content-type'),/^image\/png/);}
   assert.equal((await fetch(url+'/personagem/arachnodroid-model.js')).status,200);
   assert.equal((await fetch(url+'/specials.js')).status,200);
   assert.equal((await fetch(url+'/final-arena.js')).status,200);
@@ -36,9 +38,9 @@ test('rooms, authority, shared state, departure and frozen difficulty',async()=>
   const start=await guest.next('start');assert.deepEqual(start.multipliers,{health:4,speed:4,attacks:4});
   host.sendMessage({type:'snapshot',added:[],transforms:[],players:[{id:guest.id,hp:77}]});
   assert.equal((await guest.next('snapshot')).players[0].hp,77);
-  guest.sendMessage({type:'input',input:{keys:{KeyW:true,unexpected:true},shoot:true,parry:true,dash:true,special:true,aim:[1,2,3]}});
-  const input=await host.next('input');assert.equal(input.id,guest.id);assert.equal(input.input.keys.KeyW,true);assert.equal(input.input.keys.unexpected,undefined);
-  assert.equal(input.input.dash,true);
+  guest.sendMessage({type:'input',input:{keys:{KeyW:true,unexpected:true},shoot:true,parry:true,dash:true,dashHeld:true,special:true,aim:[1,2,3],cameraYaw:1.25}});
+  const input=await host.next('input');assert.equal(input.id,guest.id);assert.equal(input.input.keys.KeyW,true);assert.equal(input.input.keys.unexpected,undefined);assert.equal(input.input.cameraYaw,1.25);
+  assert.equal(input.input.dash,true);assert.equal(input.input.dashHeld,true);
   assert.equal(input.input.special,true);
   observer.sendMessage({type:'join',roomId:room.id,name:'Tarde'});assert.match((await observer.next('error')).message,/começou/);
   guest.close();assert.equal((await host.next('departed')).id,guest.id);assert.deepEqual(arena.rooms.get(room.id).multipliers,{health:4,speed:4,attacks:4});
@@ -65,6 +67,18 @@ test('custom difficulty is validated, shared and fixed or scaled by player count
     const factor=perPlayer?2:1;assert.deepEqual(start.multipliers,{health:3*factor,speed:.5*factor,attacks:1.25*factor});
     guest.close();await host.next('departed');assert.deepEqual(arena.rooms.get(room.id).multipliers,start.multipliers);
     host.close();
+  }
+});
+test('finite lives and infinite respawn are validated and shared with the room',async()=>{
+  for(const respawn of [{infinite:false,lives:5},{infinite:true,lives:1}]){
+    const host=await client(),guest=await client();
+    for(const invalid of [{infinite:false,lives:0},{infinite:false,lives:100},{infinite:false,lives:2.5},{infinite:'yes',lives:3}]){
+      host.sendMessage({type:'create',respawn:invalid});assert.match((await host.next('error')).message,/vidas/i);
+    }
+    host.sendMessage({type:'create',respawn});const room=(await host.next('room')).room;assert.deepEqual(room.respawn,respawn);
+    guest.sendMessage({type:'join',roomId:room.id});assert.deepEqual((await guest.next('room')).room.respawn,respawn);
+    host.sendMessage({type:'start',mode:1});assert.deepEqual((await guest.next('start')).room.respawn,respawn);
+    host.close();guest.close();
   }
 });
 test('character choices are shared, changeable in the lobby and frozen for the match',async()=>{

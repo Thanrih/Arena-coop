@@ -2,10 +2,18 @@
 
 ## Iniciar
 
-1. Dê dois cliques em **iniciar-rede.cmd**. É necessário ter Node.js 20 ou mais recente. Na primeira execução, o script instala as dependências; depois, o jogo funciona sem internet, inclusive a biblioteca gráfica.
+1. Dê dois cliques em **CentipedeArena.exe** para iniciar o servidor e abrir o jogo automaticamente. Como alternativa, use **iniciar-servidor.cmd** para manter apenas o servidor no terminal. É necessário ter Node.js 20 ou mais recente. Na primeira execução pelo `.cmd`, o script instala as dependências; depois, o jogo funciona sem internet, inclusive a biblioteca gráfica.
 2. Abra **http://localhost:3000** no computador que executa o servidor.
 3. Seus amigos devem abrir o endereço **http://IP-DO-COMPUTADOR:3000** mostrado no terminal, usando a mesma rede Wi-Fi ou cabeada. Todos acessam o mesmo servidor; cada computador não precisa instalar nada.
 4. Se o Windows solicitar acesso à rede para o Node.js, permita na rede **privada**. Mantenha o terminal aberto durante as partidas.
+
+O computador que executa o launcher é o servidor autoritativo: ele guarda as salas e simula as partidas multiplayer. O modo Singleplayer também funciona localmente pelo mesmo endereço. Fechar a janela do launcher ou pressionar `Ctrl+C` encerra o servidor e as salas ativas. O antigo **iniciar-rede.cmd** continua disponível e encaminha para **iniciar-servidor.cmd**.
+
+Para recompilar o executável após alterar o launcher:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-launcher.ps1
+```
 
 Alternativa pelo terminal, nesta pasta:
 
@@ -72,7 +80,7 @@ O **Fieldfighter** ataca com mouse esquerdo ou J: um combo de dois impactos, sep
 
 O **Arachondroid** usa o OBJ e a paleta originais de **personagem/Arachnodroid.zip**, convertidos pela mesma técnica de triângulos compactados em base36. O corpo e as quatro pernas possuem pivôs para animação. Segure o mouse esquerdo ou J para emitir um **laser contínuo**, com alcance de 42 unidades, que acerta o primeiro inimigo na linha da mira. Enquanto dispara, a velocidade de movimento cai de 9 para **4,5** e volta ao normal ao soltar o ataque. O dano é proporcional ao tempo de contato (aproximadamente 127 por segundo à centopeia e 145 aos demais inimigos, antes da armadura do golem), independentemente da taxa de quadros. Para regenerar: `python scripts/convert-arachnodroid.py`.
 
-Todos os personagens podem usar **Shift ou Q** para dar dash: movimento rápido de 0,18 segundo, com **1,5 segundo de recarga** e breve invulnerabilidade. O dash segue a direção de movimento; sem tecla de movimento, segue a direção atual do personagem. O indicador na tela mostra a recarga. Cada pressionamento solicita um dash; manter a tecla pressionada não repete automaticamente. O criador da sala verifica a recarga de cada jogador, e os movimentos e ataques aparecem para todos.
+Todos os personagens podem usar **Shift ou Q** para ativar os propulsores. O impulso inicial dura 0,18 segundo, gasta **25% do combustível** e concede breve invulnerabilidade. Manter a tecla pressionada prolonga o deslocamento em alta velocidade e consome 12% por segundo; após 0,7 segundo sem boost, o tanque regenera 20% por segundo. A direção pode ser corrigida durante o deslizamento. Durante o boost, o corpo e os membros assumem suavemente uma pose de deslizamento orientada pela direção do movimento. O Arachondroid emite partículas nos quatro pés; os bípedes usam propulsores nos pés e ombros. O medidor na tela e o estado do boost são sincronizados em multiplayer.
 
 Pressione **F** para usar o especial do personagem. O indicador mostra quando está pronto e a recarga restante:
 
@@ -90,13 +98,15 @@ O modelo 3D do Fieldfighter vem de **personagem/FieldFighter.zip**. O OBJ e a pa
 python scripts/convert-fieldfighter.py
 ```
 
-WASD ou setas: mover. Espaço: pular. Mouse esquerdo segurado ou J: atacar. Shift ou Q: dash. Mouse direito ou E: parry. O parry cobre um cone de **110°** travado na direção do ponteiro no instante da ativação; golpes vindos de trás atravessam a defesa. M: voltar ao menu. R: recarregar para jogar novamente; em grupo, é necessário entrar em uma nova sala.
+WASD ou setas: mover em relação à direção da câmera. Mova o mouse para girar a câmera em terceira pessoa e mirar livremente para cima, para baixo e para os lados; use a roda para aproximar ou afastar. Pressione **P** para alternar entre terceira pessoa e câmera isométrica. Espaço: pular. Mouse esquerdo segurado ou J: atacar. Pressione Shift ou Q para gastar 25% de combustível no impulso inicial e mantenha pressionado para deslizar rapidamente, consumindo combustível aos poucos. O combustível volta a carregar depois que o boost termina. Mouse direito ou E: parry. O campo de força protege em **todas as direções** durante sua curta janela de ativação. M: voltar ao menu. R: recarregar para jogar novamente; em grupo, é necessário entrar em uma nova sala.
 
-Durante o combate, uma mira em pixel art acompanha o mouse, pulsando e girando. A câmera se desloca suavemente na direção do mouse, tanto no modo solo quanto em grupo.
+Durante o combate, uma mira em pixel art fica no centro da tela, acima do personagem, pulsando e girando. O personagem vira para a direção horizontal do disparo, e a arma acompanha a altura da mira, tanto no modo solo quanto em grupo.
 
 Os bosses, esqueletos e voadores reavaliam o alvo a cada 2–4 segundos. Começam pelo jogador vivo mais próximo e alternam entre jogadores próximos, dando mais chance aos que estão a menor distância. Jogadores abatidos são descartados imediatamente.
 
 Os mobs voadores da centopeia nascem e permanecem a **1,3 unidade do chão**, na altura dos tiros comuns, inclusive durante suas investidas. Assim podem ser acertados com tiros horizontais.
+
+Quando o alvo está a mais de **15 unidades**, a Centopeia pode mergulhar e avançar sob o chão em alta velocidade. Partículas e um rastro de terra indicam sua trajetória. Ao emergir perto do alvo, causa **30 de dano** num raio de 4,2 unidades e lança os jogadores atingidos para longe e para o alto. O ataque e o rastro são sincronizados no multiplayer.
 
 Ao morrer, jogadores e inimigos se despedaçam em cubinhos com as cores do modelo. Os fragmentos recebem impulso e rotação, sofrem gravidade, quicam no chão e desaparecem após alguns segundos. O criador da sala simula a física e envia os movimentos aos amigos. A explosão de um jogador ocorre uma única vez; ele continua acompanhando a equipe após ser abatido.
 

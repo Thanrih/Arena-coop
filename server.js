@@ -12,22 +12,37 @@ function createArenaServer() {
     '/Centipede Arena (1).html': ['Centipede Arena (1).html', 'text/html; charset=utf-8'],
     '/multiplayer.js': ['multiplayer.js', 'text/javascript; charset=utf-8'],
     '/characters.js': ['characters.js', 'text/javascript; charset=utf-8'],
+    '/collision.js': ['collision.js', 'text/javascript; charset=utf-8'],
     '/specials.js': ['specials.js', 'text/javascript; charset=utf-8'],
     '/ettin.js': ['ettin.js', 'text/javascript; charset=utf-8'],
     '/grass-system.js': ['grass-system.js', 'text/javascript; charset=utf-8'],
+    '/inferno-world.js': ['inferno-world.js', 'text/javascript; charset=utf-8'],
+    '/audio-system.js': ['audio-system.js', 'text/javascript; charset=utf-8'],
+    '/audio/fire-minigun.mp3': ['audio/fire-minigun.mp3', 'audio/mpeg'],
+    '/audio/spawn-gollen.mp3': ['audio/spawn-gollen.mp3', 'audio/mpeg'],
+    '/audio/the-outsider-apocalypse-mix.mp3': ['audio/the-outsider-apocalypse-mix.mp3', 'audio/mpeg'],
     '/personagem/ettin-model.js': ['personagem/ettin-model.js', 'text/javascript; charset=utf-8'],
     '/final-arena.js': ['final-arena.js', 'text/javascript; charset=utf-8'],
     '/death-physics.js': ['death-physics.js', 'text/javascript; charset=utf-8'],
     '/personagem/arachnodroid-model.js': ['personagem/arachnodroid-model.js', 'text/javascript; charset=utf-8'],
     '/personagem/fieldfighter-model.js': ['personagem/fieldfighter-model.js', 'text/javascript; charset=utf-8'],
     '/network.css': ['network.css', 'text/css; charset=utf-8'],
+    '/assets/menu-forest.png': ['assets/menu-forest.png', 'image/png'],
+    '/textures/chão.png': ['textures/chão.png', 'image/png'],
+    '/textures/tronco.png': ['textures/tronco.png', 'image/png'],
+    '/textures/pilar.png': ['textures/pilar.png', 'image/png'],
+    '/textures/folhas.png': ['textures/folhas.png', 'image/png'],
+    '/textures/pedras.png': ['textures/pedras.png', 'image/png'],
     '/vendor/three.min.js': ['node_modules/three/build/three.min.js', 'text/javascript; charset=utf-8']
   };
   const server = http.createServer((req, res) => {
     let pathname;
     try { pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); }
     catch { res.writeHead(400).end(); return; }
-    const file = files[pathname];
+    let file = files[pathname];
+    // Root gameplay modules are safe to add without requiring a server restart
+    // merely to register another script in this table.
+    if(!file&&/^\/[a-z0-9-]+\.js$/i.test(pathname)&&!['/server.js'].includes(pathname))file=[pathname.slice(1),'text/javascript; charset=utf-8'];
     if (!file || !['GET', 'HEAD'].includes(req.method)) { res.writeHead(404).end(); return; }
     fs.readFile(path.join(__dirname, file[0]), (err, data) => {
       if (err) { res.writeHead(500).end('Arquivo indisponível. Execute npm install.'); return; }
@@ -53,7 +68,7 @@ function createArenaServer() {
     for (const ws of room.players.values()) if (ws !== except) send(ws, message);
   };
   const roster = room => ({ id: room.id, name: room.name, host: room.host, mode: room.mode,
-    status: room.status, difficulty: room.difficulty, multipliers: room.multipliers,
+    status: room.status, difficulty: room.difficulty, respawn: room.respawn, multipliers: room.multipliers,
     players: [...room.players.values()].map(ws => ({ id: ws.id, name: ws.name, character: ws.character })) });
   const list = () => [...rooms.values()].map(room => ({ ...roster(room), capacity: 8 }));
   const publish = () => { for (const ws of wss.clients) send(ws, { type: 'rooms', rooms: list() }); };
@@ -99,12 +114,19 @@ function createArenaServer() {
             Number.isFinite(difficulty[key]) && difficulty[key] >= .25 && difficulty[key] <= 10)) {
           return error('Os multiplicadores de dificuldade devem ser números entre 0,25 e 10.');
         }
+        const respawn = msg.respawn === undefined ? { infinite: false, lives: 3 } : msg.respawn;
+        if (!respawn || typeof respawn !== 'object' || Array.isArray(respawn) ||
+          typeof respawn.infinite !== 'boolean' || !Number.isInteger(respawn.lives) ||
+          respawn.lives < 1 || respawn.lives > 99) {
+          return error('As vidas por jogador devem ser um número inteiro entre 1 e 99.');
+        }
         ws.name = clean(msg.name, 'Robô');
         ws.character = ['ranger','fieldfighter','arachnodroid'].includes(msg.character) ? msg.character : 'ranger';
-        const mode = [0, 1, 2, 3, 4, 5].includes(msg.mode) ? msg.mode : 0;
+        const mode = [0, 1, 2, 3, 4, 5, 6].includes(msg.mode) ? msg.mode : 0;
         const next = { id: randomUUID(), name: clean(msg.roomName, 'Arena dos amigos'), host: ws.id,
           difficulty: { health: difficulty.health, speed: difficulty.speed,
             attacks: difficulty.attacks, perPlayer: difficulty.perPlayer },
+          respawn: { infinite: respawn.infinite, lives: respawn.lives },
           mode, status: 'waiting', players: new Map([[ws.id, ws]]) };
         rooms.set(next.id, next); ws.roomId = next.id;
         send(ws, { type: 'room', room: roster(next) }); publish(); return;
@@ -128,7 +150,7 @@ function createArenaServer() {
       }
       if (msg.type === 'start') {
         if (room.host !== ws.id || room.status !== 'waiting') return error('Apenas o criador pode iniciar.');
-        if (![0, 1, 2, 3, 4, 5].includes(msg.mode)) return error('Boss inválido.');
+        if (![0, 1, 2, 3, 4, 5, 6].includes(msg.mode)) return error('Boss inválido.');
         room.mode = msg.mode; room.status = 'playing';
         // Difficulty is frozen for this match, even if someone disconnects.
         const factor = room.difficulty.perPlayer ? room.players.size : 1;
@@ -143,8 +165,9 @@ function createArenaServer() {
           !input.aim.every(n => Number.isFinite(n) && Math.abs(n) < 200)) return;
         const allowed = ['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyJ'];
         const keys = Object.fromEntries(allowed.map(k => [k, !!input.keys?.[k]]));
+        const cameraYaw = Number.isFinite(input.cameraYaw) && Math.abs(input.cameraYaw) < 1000 ? input.cameraYaw : 0;
         send(room.players.get(room.host), { type: 'input', id: ws.id,
-          input: { keys, aim: input.aim, shoot: !!input.shoot, parry: !!input.parry, dash: !!input.dash, special: !!input.special } });
+          input: { keys, aim: input.aim, cameraYaw, shoot: !!input.shoot, parry: !!input.parry, dash: !!input.dash, dashHeld: !!input.dashHeld, special: !!input.special } });
       }
       if (msg.type === 'snapshot' && ws.id === room.host) {
         // Ordered reliable messages preserve object creation/removal before transform updates.
